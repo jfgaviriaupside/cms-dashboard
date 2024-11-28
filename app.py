@@ -658,8 +658,18 @@ with tab3:
                 }).fillna(0)
                 
                 fig_procedures = pl.graph_objects.Figure(data=[
-                    pl.graph_objects.Bar(name=older_month, x=procedures_comp.index, y=procedures_comp[older_month], color=COLOR_SCHEME[0]),
-                    pl.graph_objects.Bar(name=newest_month, x=procedures_comp.index, y=procedures_comp[newest_month], color=COLOR_SCHEME[1])
+                    pl.graph_objects.Bar(
+                        name=older_month, 
+                        x=procedures_comp.index, 
+                        y=procedures_comp[older_month], 
+                        marker_color=COLOR_SCHEME[0]
+                    ),
+                    pl.graph_objects.Bar(
+                        name=newest_month, 
+                        x=procedures_comp.index, 
+                        y=procedures_comp[newest_month], 
+                        marker_color=COLOR_SCHEME[1]
+                    )
                 ])
                 fig_procedures.update_layout(
                     barmode='group',
@@ -676,8 +686,18 @@ with tab3:
                 }).fillna(0)
                 
                 fig_insurance = pl.graph_objects.Figure(data=[
-                    pl.graph_objects.Bar(name=older_month, x=insurance_comp.index, y=insurance_comp[older_month], color=COLOR_SCHEME[0]),
-                    pl.graph_objects.Bar(name=newest_month, x=insurance_comp.index, y=insurance_comp[newest_month], color=COLOR_SCHEME[1])
+                    pl.graph_objects.Bar(
+                        name=older_month, 
+                        x=insurance_comp.index, 
+                        y=insurance_comp[older_month], 
+                        marker_color=COLOR_SCHEME[0]
+                    ),
+                    pl.graph_objects.Bar(
+                        name=newest_month, 
+                        x=insurance_comp.index, 
+                        y=insurance_comp[newest_month], 
+                        marker_color=COLOR_SCHEME[1]
+                    )
                 ])
                 fig_insurance.update_layout(
                     barmode='group',
