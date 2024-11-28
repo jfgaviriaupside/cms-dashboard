@@ -292,15 +292,15 @@ if base_data is not None:
             }, index=top_10_doctors.index)
             
             # Create grouped bar chart
-            fig_doctors = go.Figure(data=[
-                go.Bar(
+            fig_doctors = pl.graph_objects.Figure(data=[
+                pl.graph_objects.Bar(
                     name=older_month,
                     x=doctor_comparison.index,
                     y=doctor_comparison[older_month],
                     text=doctor_comparison[older_month].round(0).astype(int),
                     textposition='auto',
                 ),
-                go.Bar(
+                pl.graph_objects.Bar(
                     name=newest_month,
                     x=doctor_comparison.index,
                     y=doctor_comparison[newest_month],
@@ -339,8 +339,8 @@ if base_data is not None:
             
             with col1:
                 st.subheader("Top 10 Gainers")
-                fig_gainers = go.Figure(data=[
-                    go.Bar(
+                fig_gainers = pl.graph_objects.Figure(data=[
+                    pl.graph_objects.Bar(
                         x=gainers.index,
                         y=gainers['Change'],
                         text=gainers['Change'].round(0).astype(int),
@@ -356,8 +356,8 @@ if base_data is not None:
             
             with col2:
                 st.subheader("Top 10 Decreases")
-                fig_losers = go.Figure(data=[
-                    go.Bar(
+                fig_losers = pl.graph_objects.Figure(data=[
+                    pl.graph_objects.Bar(
                         x=losers.index,
                         y=losers['Change'],
                         text=losers['Change'].round(0).astype(int),
@@ -384,9 +384,9 @@ if base_data is not None:
                 compare_months[1]: insurance_counts[compare_months[1]]
             }).fillna(0)
             
-            fig_insurance = go.Figure(data=[
-                go.Bar(name=compare_months[0], x=insurance_comparison.index, y=insurance_comparison[compare_months[0]]),
-                go.Bar(name=compare_months[1], x=insurance_comparison.index, y=insurance_comparison[compare_months[1]])
+            fig_insurance = pl.graph_objects.Figure(data=[
+                pl.graph_objects.Bar(name=compare_months[0], x=insurance_comparison.index, y=insurance_comparison[compare_months[0]]),
+                pl.graph_objects.Bar(name=compare_months[1], x=insurance_comparison.index, y=insurance_comparison[compare_months[1]])
             ])
             fig_insurance.update_layout(
                 barmode='group',
@@ -520,9 +520,9 @@ if base_data is not None:
                         newest_month: doctor_data[doctor_data['Month'] == newest_month]['PROCEDURE'].value_counts()
                     }).fillna(0)
                     
-                    fig_procedures = go.Figure(data=[
-                        go.Bar(name=older_month, x=procedures_comp.index, y=procedures_comp[older_month]),
-                        go.Bar(name=newest_month, x=procedures_comp.index, y=procedures_comp[newest_month])
+                    fig_procedures = pl.graph_objects.Figure(data=[
+                        pl.graph_objects.Bar(name=older_month, x=procedures_comp.index, y=procedures_comp[older_month]),
+                        pl.graph_objects.Bar(name=newest_month, x=procedures_comp.index, y=procedures_comp[newest_month])
                     ])
                     fig_procedures.update_layout(
                         barmode='group',
@@ -538,9 +538,9 @@ if base_data is not None:
                         newest_month: doctor_data[doctor_data['Month'] == newest_month]['Data Set'].value_counts()
                     }).fillna(0)
                     
-                    fig_insurance = go.Figure(data=[
-                        go.Bar(name=older_month, x=insurance_comp.index, y=insurance_comp[older_month]),
-                        go.Bar(name=newest_month, x=insurance_comp.index, y=insurance_comp[newest_month])
+                    fig_insurance = pl.graph_objects.Figure(data=[
+                        pl.graph_objects.Bar(name=older_month, x=insurance_comp.index, y=insurance_comp[older_month]),
+                        pl.graph_objects.Bar(name=newest_month, x=insurance_comp.index, y=insurance_comp[newest_month])
                     ])
                     fig_insurance.update_layout(
                         barmode='group',
@@ -700,10 +700,10 @@ if base_data is not None:
             st.subheader("Category Performance Comparison")
             
             # Total Procedures by Category
-            fig_procedures = go.Figure()
+            fig_procedures = pl.graph_objects.Figure()
             for category in categories.keys():
                 category_data = performance_df[performance_df['Category'] == category]
-                fig_procedures.add_trace(go.Bar(
+                fig_procedures.add_trace(pl.graph_objects.Bar(
                     name=category,
                     x=category_data['Month'],
                     y=category_data['Total Procedures'],
@@ -721,10 +721,10 @@ if base_data is not None:
             # Average Procedures per Doctor
             col1, col2 = st.columns(2)
             with col1:
-                fig_avg = go.Figure()
+                fig_avg = pl.graph_objects.Figure()
                 for category in categories.keys():
                     category_data = performance_df[performance_df['Category'] == category]
-                    fig_avg.add_trace(go.Bar(
+                    fig_avg.add_trace(pl.graph_objects.Bar(
                         name=category,
                         x=category_data['Month'],
                         y=category_data['Avg Procedures per Doctor'],
@@ -740,10 +740,10 @@ if base_data is not None:
                 st.plotly_chart(fig_avg, use_container_width=True)
             
             with col2:
-                fig_active = go.Figure()
+                fig_active = pl.graph_objects.Figure()
                 for category in categories.keys():
                     category_data = performance_df[performance_df['Category'] == category]
-                    fig_active.add_trace(go.Bar(
+                    fig_active.add_trace(pl.graph_objects.Bar(
                         name=category,
                         x=category_data['Month'],
                         y=category_data['Unique Doctors Active'],
