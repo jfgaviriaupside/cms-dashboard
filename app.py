@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
+import plotly as pl
 
 # Initial setup
 st.set_page_config(page_title="CMS Performance Dashboard", layout="wide")
