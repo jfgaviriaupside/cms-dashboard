@@ -198,6 +198,18 @@ with tab1:
     # First Tab: One Month Overview
     st.subheader("One Month Overview")
     
+    # Add instructions
+    st.info("""
+    📊 **How to use this tab:**
+    1. Select a month from the dropdown menu below
+    2. View the monthly metrics (total procedures, referring doctors, and insurances)
+    3. Explore the procedure distribution chart
+    4. Check the top referring doctors for the selected month
+    5. Analyze insurance distribution through the pie chart
+    
+    This tab provides a comprehensive overview of all activity for a single selected month.
+    """)
+    
     # Select month for detailed view
     selected_month = st.selectbox("Select Month", month_summary['Month'].unique())
     filtered_data = month_summary[month_summary['Month'] == selected_month]
@@ -263,6 +275,23 @@ with tab1:
 with tab2:
     # Second Tab: Two Month Comparison
     st.subheader("Two Month Comparison")
+    
+    # Add instructions
+    st.info("""
+    📊 **How to use this tab:**
+    1. Select two months to compare using the dropdown menu
+    2. Optionally filter by specific procedure type
+    3. Compare key metrics between the two months:
+       - Total procedures
+       - Number of physicians
+       - Insurance diversity
+    4. Analyze the changes in referring doctors:
+       - Top performers comparison
+       - Biggest gainers and decreases
+    5. Compare insurance distributions between months
+    
+    This tab helps identify trends and changes between any two selected months.
+    """)
     
     # Select months for comparison (limit to 2)
     col1, col2 = st.columns([2, 1])
