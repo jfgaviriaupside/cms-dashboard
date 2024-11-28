@@ -17,6 +17,14 @@ mexico_tz = pytz.timezone('America/Mexico_City')
 current_time = datetime.now(mexico_tz)
 st.caption(f"Last Updated: {current_time.strftime('%Y-%m-%d %I:%M %p %Z')}")
 
+# Add this after the validate_data function and before loading the base data
+
+def calculate_percentage_change(old_value, new_value):
+    """Calculate the percentage change between two values."""
+    if old_value == 0:
+        return None
+    return ((new_value - old_value) / old_value) * 100
+
 # Load base data
 @st.cache_data
 def load_base_data():
