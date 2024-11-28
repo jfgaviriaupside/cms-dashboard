@@ -12,8 +12,29 @@ st.title("CMS Performance Dashboard")
 def load_base_data():
     try:
         # Attempt to load the base data file
-        base_data = pd.read_excel("base_data.xlsx")  # or .csv depending on your file
+        base_data = pd.read_excel("base_data.xlsx")
+        
+        # Verify the required columns exist
+        required_columns = ['TRANSFORMED DATE', 'PROCEDURE', 'REFERRING PHYSICIAN', 'Data Set']
+        missing_columns = [col for col in required_columns if col not in base_data.columns]
+        
+        if missing_columns:
+            st.error(f"Base data is missing required columns: {', '.join(missing_columns)}")
+            return None
+            
+        # Convert date column
+        try:
+            base_data['TRANSFORMED DATE'] = pd.to_datetime(base_data['TRANSFORMED DATE'])
+        except Exception as e:
+            st.error(f"Error converting dates in base data: {str(e)}")
+            return None
+            
+        st.success(f"Successfully loaded base data with {len(base_data)} records")
         return base_data
+        
+    except FileNotFoundError:
+        st.error("Could not find base_data.xlsx in the current directory. Please ensure the file exists.")
+        return None
     except Exception as e:
         st.error(f"Error loading base data: {str(e)}")
         return None
@@ -34,11 +55,12 @@ top_200_docs = load_top_200_docs()
 
 # Function to validate new data
 def validate_data(new_data, base_data):
+    validation_errors = []
+    
     # Check if columns match
-    if not all(col in new_data.columns for col in base_data.columns):
-        missing_cols = set(base_data.columns) - set(new_data.columns)
-        st.error(f"Missing columns in uploaded file: {missing_cols}")
-        return False
+    missing_cols = set(base_data.columns) - set(new_data.columns)
+    if missing_cols:
+        validation_errors.append(f"Missing columns in uploaded file: {missing_cols}")
     
     # Check data types of key columns
     required_types = {
@@ -49,15 +71,28 @@ def validate_data(new_data, base_data):
     }
     
     for col, dtype in required_types.items():
-        try:
-            new_data[col] = new_data[col].astype(dtype)
-        except Exception as e:
-            st.error(f"Error converting column {col} to {dtype}: {str(e)}")
-            return False
+        if col in new_data.columns:
+            try:
+                new_data[col] = new_data[col].astype(dtype)
+            except Exception as e:
+                validation_errors.append(f"Error converting column {col} to {dtype}: {str(e)}")
+    
+    if validation_errors:
+        for error in validation_errors:
+            st.error(error)
+        return False
     
     return True
 
 if base_data is not None:
+    # Display base data info
+    st.sidebar.info(f"""
+    Base Data Summary:
+    - Total Records: {len(base_data):,}
+    - Date Range: {base_data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {base_data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}
+    - Unique Doctors: {base_data['REFERRING PHYSICIAN'].nunique():,}
+    """)
+    
     # Upload new data
     st.subheader("Upload New Data")
     uploaded_file = st.file_uploader(
@@ -74,28 +109,37 @@ if base_data is not None:
             else:
                 new_data = pd.read_csv(uploaded_file)
             
+            st.info(f"Attempting to process {len(new_data):,} new records...")
+            
             # Validate new data
             if validate_data(new_data, base_data):
                 # Combine data
                 data = pd.concat([base_data, new_data], ignore_index=True)
                 
                 # Remove duplicates if any
+                initial_len = len(data)
                 data = data.drop_duplicates()
+                duplicates_removed = initial_len - len(data)
                 
                 # Sort by date
                 data = data.sort_values('TRANSFORMED DATE')
                 
-                st.success(f"Successfully added {len(new_data)} new records!")
+                st.success(f"""
+                Successfully processed new data:
+                - Records added: {len(new_data):,}
+                - Duplicates removed: {duplicates_removed:,}
+                - Total records now: {len(data):,}
+                """)
                 
                 # Display summary of new data
                 st.write("Summary of new data:")
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("New Records", len(new_data))
+                    st.metric("New Records", f"{len(new_data):,}")
                 with col2:
                     st.metric("Date Range", f"{new_data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {new_data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}")
                 with col3:
-                    st.metric("Unique Doctors", new_data['REFERRING PHYSICIAN'].nunique())
+                    st.metric("Unique Doctors", f"{new_data['REFERRING PHYSICIAN'].nunique():,}")
             else:
                 st.error("Please fix the data format issues before proceeding")
                 st.stop()
@@ -105,670 +149,683 @@ if base_data is not None:
             st.stop()
     else:
         # If no new data uploaded, use base data
-        data = base_data
+        data = base_data.copy()
 
-    # Continue with the rest of your code...
-    # (The preprocessing steps remain the same)
-    data['TRANSFORMED DATE'] = pd.to_datetime(data['TRANSFORMED DATE'])
+    # Continue with data preprocessing
     data['Month'] = data['TRANSFORMED DATE'].dt.to_period('M').astype(str)
     data['Day of Month'] = data['TRANSFORMED DATE'].dt.day
     data['Day of Week'] = data['TRANSFORMED DATE'].dt.day_name()
     
-    # Filter working days
-    working_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-    working_data = data[data['Day of Week'].isin(working_days)]
+    # Display current data summary in sidebar
+    st.sidebar.success(f"""
+    Current Data Summary:
+    - Total Records: {len(data):,}
+    - Date Range: {data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}
+    - Unique Doctors: {data['REFERRING PHYSICIAN'].nunique():,}
+    - Months Available: {data['Month'].nunique()}
+    """)
+
+else:
+    st.error("""
+    No base data available. Please ensure:
+    1. The file 'base_data.xlsx' exists in the app directory
+    2. The file contains the required columns
+    3. The data is properly formatted
+    """)
+    st.stop()
+
+# Filter working days
+working_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+working_data = data[data['Day of Week'].isin(working_days)]
+
+# Aggregations
+month_summary = (
+    working_data
+    .groupby(['Month', 'PROCEDURE'])
+    .size()
+    .reset_index(name='Count')
+)
+
+# Create tabs for navigation
+tab1, tab2, tab3, tab4 = st.tabs([
+    "One Month Overview", 
+    "Two Month Comparison", 
+    "Top 200 Doctors Performance and Comparison",
+    "Top 200 Doctors Category Analysis"
+])
+
+with tab1:
+    # First Tab: One Month Overview
+    st.subheader("One Month Overview")
     
-    # Aggregations
-    month_summary = (
-        working_data
-        .groupby(['Month', 'PROCEDURE'])
+    # Select month for detailed view
+    selected_month = st.selectbox("Select Month", month_summary['Month'].unique())
+    filtered_data = month_summary[month_summary['Month'] == selected_month]
+    
+    # Filter working data for selected month
+    monthly_data = working_data[working_data['Month'] == selected_month]
+    
+    # Big number metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        total_procedures = len(monthly_data)
+        st.metric("Total Monthly Procedures", total_procedures)
+    
+    with col2:
+        unique_doctors = monthly_data['REFERRING PHYSICIAN'].nunique()
+        st.metric("Total Unique Referring Doctors", unique_doctors)
+    
+    with col3:
+        unique_insurances = monthly_data['Data Set'].nunique()
+        st.metric("Total Unique Insurances", unique_insurances)
+    
+    # Interactive Bar Chart - Procedures by Count
+    st.subheader("Procedures Distribution")
+    fig = px.bar(filtered_data, 
+                x='PROCEDURE', 
+                y='Count', 
+                title=f"Procedures Count for {selected_month}")
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Top Referring Doctors
+    st.subheader("Top Referring Doctors")
+    top_doctors = (
+        monthly_data.groupby('REFERRING PHYSICIAN')
         .size()
+        .sort_values(ascending=False)
         .reset_index(name='Count')
+        .head(10)
     )
     
-    # Create tabs for navigation
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "One Month Overview", 
-        "Two Month Comparison", 
-        "Top 200 Doctors Performance and Comparison",
-        "Top 200 Doctors Category Analysis"
-    ])
+    fig_doctors = px.bar(top_doctors, 
+                       x='REFERRING PHYSICIAN', 
+                       y='Count', 
+                       title=f"Top 10 Referring Doctors - {selected_month}")
+    st.plotly_chart(fig_doctors, use_container_width=True)
     
-    with tab1:
-        # First Tab: One Month Overview
-        st.subheader("One Month Overview")
-        
-        # Select month for detailed view
-        selected_month = st.selectbox("Select Month", month_summary['Month'].unique())
-        filtered_data = month_summary[month_summary['Month'] == selected_month]
-        
-        # Filter working data for selected month
-        monthly_data = working_data[working_data['Month'] == selected_month]
-        
-        # Big number metrics
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            total_procedures = len(monthly_data)
-            st.metric("Total Monthly Procedures", total_procedures)
-        
-        with col2:
-            unique_doctors = monthly_data['REFERRING PHYSICIAN'].nunique()
-            st.metric("Total Unique Referring Doctors", unique_doctors)
-        
-        with col3:
-            unique_insurances = monthly_data['Data Set'].nunique()
-            st.metric("Total Unique Insurances", unique_insurances)
-        
-        # Interactive Bar Chart - Procedures by Count
-        st.subheader("Procedures Distribution")
-        fig = px.bar(filtered_data, 
-                    x='PROCEDURE', 
-                    y='Count', 
-                    title=f"Procedures Count for {selected_month}")
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Top Referring Doctors
-        st.subheader("Top Referring Doctors")
-        top_doctors = (
-            monthly_data.groupby('REFERRING PHYSICIAN')
-            .size()
-            .sort_values(ascending=False)
-            .reset_index(name='Count')
-            .head(10)
-        )
-        
-        fig_doctors = px.bar(top_doctors, 
-                           x='REFERRING PHYSICIAN', 
-                           y='Count', 
-                           title=f"Top 10 Referring Doctors - {selected_month}")
-        st.plotly_chart(fig_doctors, use_container_width=True)
-        
-        # Top Insurances
-        st.subheader("Top Insurances")
-        top_insurances = (
-            monthly_data.groupby('Data Set')
-            .size()
-            .sort_values(ascending=False)
-            .reset_index(name='Count')
-            .head(10)
-        )
-        
-        fig_insurances = px.pie(top_insurances, 
-                              names='Data Set', 
-                              values='Count', 
-                              title=f"Top 10 Insurances by Procedure Count - {selected_month}")
-        st.plotly_chart(fig_insurances, use_container_width=True)
+    # Top Insurances
+    st.subheader("Top Insurances")
+    top_insurances = (
+        monthly_data.groupby('Data Set')
+        .size()
+        .sort_values(ascending=False)
+        .reset_index(name='Count')
+        .head(10)
+    )
+    
+    fig_insurances = px.pie(top_insurances, 
+                          names='Data Set', 
+                          values='Count', 
+                          title=f"Top 10 Insurances by Procedure Count - {selected_month}")
+    st.plotly_chart(fig_insurances, use_container_width=True)
 
-    with tab2:
-        # Second Tab: Two Month Comparison
-        st.subheader("Two Month Comparison")
-        
-        # Select months for comparison (limit to 2)
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            compare_months = st.multiselect(
-                "Select Two Months to Compare",
-                options=working_data['Month'].unique(),
-                default=working_data['Month'].unique()[-2:],  # Default to last two months
-                max_selections=2
-            )
-        
-        # Ensure exactly two months are selected
-        if len(compare_months) != 2:
-            st.warning("Please select exactly two months to compare")
-        else:
-            # Optional procedure filter
-            with col2:
-                procedure_filter = st.selectbox(
-                    "Filter by Procedure (Optional)",
-                    options=["All Procedures"] + list(working_data['PROCEDURE'].unique())
-                )
-            
-            # Filter data based on selections
-            if procedure_filter == "All Procedures":
-                compare_data = working_data[working_data['Month'].isin(compare_months)]
-            else:
-                compare_data = working_data[
-                    (working_data['Month'].isin(compare_months)) & 
-                    (working_data['PROCEDURE'] == procedure_filter)
-                ]
-            
-            # Monthly comparison metrics
-            st.subheader("Monthly Comparison")
-            col1, col2, col3 = st.columns(3)
-            
-            # Calculate metrics for each month
-            metrics = {}
-            for month in compare_months:
-                month_data = compare_data[compare_data['Month'] == month]
-                metrics[month] = {
-                    'Total Procedures': len(month_data),
-                    'Unique Physicians': month_data['REFERRING PHYSICIAN'].nunique(),
-                    'Unique Insurances': month_data['Data Set'].nunique()
-                }
-            
-            # Display metrics with month-over-month comparison
-            with col1:
-                st.metric(
-                    "Total Procedures",
-                    metrics[compare_months[1]]['Total Procedures'],
-                    metrics[compare_months[1]]['Total Procedures'] - metrics[compare_months[0]]['Total Procedures']
-                )
-            with col2:
-                st.metric(
-                    "Unique Physicians",
-                    metrics[compare_months[1]]['Unique Physicians'],
-                    metrics[compare_months[1]]['Unique Physicians'] - metrics[compare_months[0]]['Unique Physicians']
-                )
-            with col3:
-                st.metric(
-                    "Unique Insurances",
-                    metrics[compare_months[1]]['Unique Insurances'],
-                    metrics[compare_months[1]]['Unique Insurances'] - metrics[compare_months[0]]['Unique Insurances']
-                )
-            
-            # Top 10 Referring Doctors comparison
-            st.subheader("Top 10 Referring Doctors")
-            
-            # Get top 10 doctors from newest month
-            newest_month = compare_months[1]
-            older_month = compare_months[0]
-            
-            newest_month_data = compare_data[compare_data['Month'] == newest_month]
-            older_month_data = compare_data[compare_data['Month'] == older_month]
-            
-            # Get counts for both months
-            newest_month_counts = newest_month_data.groupby('REFERRING PHYSICIAN').size()
-            older_month_counts = older_month_data.groupby('REFERRING PHYSICIAN').size()
-            
-            # Get top 10 doctors from newest month
-            top_10_doctors = newest_month_counts.nlargest(10)
-            
-            # Create comparison dataframe with proper handling of missing doctors
-            doctor_comparison = pd.DataFrame({
-                older_month: [older_month_counts.get(doctor, 0) for doctor in top_10_doctors.index],
-                newest_month: top_10_doctors.values
-            }, index=top_10_doctors.index)
-            
-            # Create grouped bar chart
-            fig_doctors = pl.graph_objects.Figure(data=[
-                pl.graph_objects.Bar(
-                    name=older_month,
-                    x=doctor_comparison.index,
-                    y=doctor_comparison[older_month],
-                    text=doctor_comparison[older_month].round(0).astype(int),
-                    textposition='auto',
-                ),
-                pl.graph_objects.Bar(
-                    name=newest_month,
-                    x=doctor_comparison.index,
-                    y=doctor_comparison[newest_month],
-                    text=doctor_comparison[newest_month].round(0).astype(int),
-                    textposition='auto',
-                )
-            ])
-            
-            fig_doctors.update_layout(
-                barmode='group',
-                title=f"Top 10 Referring Doctors Comparison ({older_month} vs {newest_month})",
-                xaxis_title="Referring Physician",
-                yaxis_title="Number of Procedures",
-                showlegend=True,
-                xaxis_tickangle=45,
-                height=500
-            )
-            
-            st.plotly_chart(fig_doctors, use_container_width=True)
-            
-            # Calculate changes for all doctors
-            all_doctors_comparison = pd.DataFrame({
-                older_month: older_month_data.groupby('REFERRING PHYSICIAN').size(),
-                newest_month: newest_month_data.groupby('REFERRING PHYSICIAN').size()
-            }).fillna(0)
-            
-            # Calculate absolute change
-            all_doctors_comparison['Change'] = all_doctors_comparison[newest_month] - all_doctors_comparison[older_month]
-            
-            # Get top 10 gainers and losers
-            gainers = all_doctors_comparison.nlargest(10, 'Change')
-            losers = all_doctors_comparison.nsmallest(10, 'Change')
-            
-            # Display gainers and losers
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.subheader("Top 10 Gainers")
-                fig_gainers = pl.graph_objects.Figure(data=[
-                    pl.graph_objects.Bar(
-                        x=gainers.index,
-                        y=gainers['Change'],
-                        text=gainers['Change'].round(0).astype(int),
-                        textposition='auto',
-                    )
-                ])
-                fig_gainers.update_layout(
-                    title=f"Largest Increases ({older_month} to {newest_month})",
-                    yaxis_title="Additional Procedures",
-                    xaxis_tickangle=45
-                )
-                st.plotly_chart(fig_gainers, use_container_width=True)
-            
-            with col2:
-                st.subheader("Top 10 Decreases")
-                fig_losers = pl.graph_objects.Figure(data=[
-                    pl.graph_objects.Bar(
-                        x=losers.index,
-                        y=losers['Change'],
-                        text=losers['Change'].round(0).astype(int),
-                        textposition='auto',
-                    )
-                ])
-                fig_losers.update_layout(
-                    title=f"Largest Decreases ({older_month} to {newest_month})",
-                    yaxis_title="Change in Procedures",
-                    xaxis_tickangle=45
-                )
-                st.plotly_chart(fig_losers, use_container_width=True)
-            
-            # Top 10 insurances comparison
-            st.subheader("Top 10 Insurances")
-            insurance_counts = {}
-            for month in compare_months:
-                month_data = compare_data[compare_data['Month'] == month]
-                insurance_counts[month] = month_data.groupby('Data Set').size().nlargest(10)
-            
-            # Create comparison bar chart
-            insurance_comparison = pd.DataFrame({
-                compare_months[0]: insurance_counts[compare_months[0]],
-                compare_months[1]: insurance_counts[compare_months[1]]
-            }).fillna(0)
-            
-            fig_insurance = pl.graph_objects.Figure(data=[
-                pl.graph_objects.Bar(name=compare_months[0], x=insurance_comparison.index, y=insurance_comparison[compare_months[0]]),
-                pl.graph_objects.Bar(name=compare_months[1], x=insurance_comparison.index, y=insurance_comparison[compare_months[1]])
-            ])
-            fig_insurance.update_layout(
-                barmode='group',
-                title="Top 10 Insurances Comparison",
-                xaxis_title="Insurance",
-                yaxis_title="Number of Procedures"
-            )
-            st.plotly_chart(fig_insurance, use_container_width=True)
-
-    with tab3:
-        if top_200_docs is not None:
-            st.subheader("Top 200 Doctors Performance and Comparison")
-            
-            # Add instructions
-            st.info("""
-            📊 **How to use this tab:**
-            - Select one month for individual analysis
-            - Select two months for comparison analysis
-            - When comparing two months, the first selected month will be the base month, and the second month will show the changes relative to the base month
-            """)
-            
-            # Doctor selector and month filter
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                selected_doctor = st.selectbox(
-                    "Select Doctor",
-                    options=top_200_docs['Referring Physician'].tolist()
-                )
-            with col2:
-                compare_months = st.multiselect(
-                    "Select Month(s) to Analyze (Max 2)",
-                    options=working_data['Month'].unique(),
-                    default=[working_data['Month'].unique()[-1]],  # Default to latest month
-                    max_selections=2,
-                    help="First month selected will be the base month for comparison"
-                )
-            
-            if len(compare_months) > 0:
-                # Filter data for selected doctor and months
-                doctor_data = working_data[
-                    (working_data['REFERRING PHYSICIAN'] == selected_doctor) &
-                    (working_data['Month'].isin(compare_months))
-                ]
-                
-                if len(compare_months) == 1:
-                    # Single month analysis
-                    month_data = doctor_data[doctor_data['Month'] == compare_months[0]]
-                    
-                    # Summary metrics in columns
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        total_referrals = len(month_data)
-                        st.metric("Total Procedures", total_referrals)
-                    with col2:
-                        unique_procedures = month_data['PROCEDURE'].nunique()
-                        st.metric("Unique Procedures", unique_procedures)
-                    with col3:
-                        unique_insurances = month_data['Data Set'].nunique()
-                        st.metric("Unique Insurances", unique_insurances)
-                    
-                    # Pie charts for composition
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        # Procedure composition pie chart
-                        procedure_comp = month_data['PROCEDURE'].value_counts().reset_index()
-                        procedure_comp.columns = ['PROCEDURE', 'Count']
-                        
-                        fig_procedures = px.pie(
-                            procedure_comp,
-                            values='Count',
-                            names='PROCEDURE',
-                            title=f"Procedure Distribution - {selected_doctor} ({compare_months[0]})"
-                        )
-                        st.plotly_chart(fig_procedures, use_container_width=True)
-                    
-                    with col2:
-                        # Insurance composition pie chart
-                        insurance_comp = month_data['Data Set'].value_counts().reset_index()
-                        insurance_comp.columns = ['Insurance', 'Count']
-                        
-                        fig_insurance = px.pie(
-                            insurance_comp,
-                            values='Count',
-                            names='Insurance',
-                            title=f"Insurance Distribution - {selected_doctor} ({compare_months[0]})"
-                        )
-                        st.plotly_chart(fig_insurance, use_container_width=True)
-                    
-                else:  # Two month comparison
-                    newest_month = compare_months[1]
-                    older_month = compare_months[0]
-                    
-                    # Calculate metrics for both months
-                    metrics = {}
-                    for month in compare_months:
-                        month_data = doctor_data[doctor_data['Month'] == month]
-                        metrics[month] = {
-                            'Total Procedures': len(month_data),
-                            'Unique Procedures': month_data['PROCEDURE'].nunique(),
-                            'Unique Insurances': month_data['Data Set'].nunique()
-                        }
-                    
-                    # Display metrics with month-over-month comparison
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric(
-                            "Total Procedures",
-                            metrics[newest_month]['Total Procedures'],
-                            metrics[newest_month]['Total Procedures'] - metrics[older_month]['Total Procedures']
-                        )
-                    with col2:
-                        st.metric(
-                            "Unique Procedures",
-                            metrics[newest_month]['Unique Procedures'],
-                            metrics[newest_month]['Unique Procedures'] - metrics[older_month]['Unique Procedures']
-                        )
-                    with col3:
-                        st.metric(
-                            "Unique Insurances",
-                            metrics[newest_month]['Unique Insurances'],
-                            metrics[newest_month]['Unique Insurances'] - metrics[older_month]['Unique Insurances']
-                        )
-                    
-                    # Create comparison bar charts
-                    st.subheader(f"Monthly Comparison - {selected_doctor}")
-                    
-                    # Procedures by type comparison
-                    procedures_comp = pd.DataFrame({
-                        older_month: doctor_data[doctor_data['Month'] == older_month]['PROCEDURE'].value_counts(),
-                        newest_month: doctor_data[doctor_data['Month'] == newest_month]['PROCEDURE'].value_counts()
-                    }).fillna(0)
-                    
-                    fig_procedures = pl.graph_objects.Figure(data=[
-                        pl.graph_objects.Bar(name=older_month, x=procedures_comp.index, y=procedures_comp[older_month]),
-                        pl.graph_objects.Bar(name=newest_month, x=procedures_comp.index, y=procedures_comp[newest_month])
-                    ])
-                    fig_procedures.update_layout(
-                        barmode='group',
-                        title="Procedures Comparison",
-                        xaxis_title="Procedure Type",
-                        yaxis_title="Number of Procedures"
-                    )
-                    st.plotly_chart(fig_procedures, use_container_width=True)
-                    
-                    # Insurance comparison
-                    insurance_comp = pd.DataFrame({
-                        older_month: doctor_data[doctor_data['Month'] == older_month]['Data Set'].value_counts(),
-                        newest_month: doctor_data[doctor_data['Month'] == newest_month]['Data Set'].value_counts()
-                    }).fillna(0)
-                    
-                    fig_insurance = pl.graph_objects.Figure(data=[
-                        pl.graph_objects.Bar(name=older_month, x=insurance_comp.index, y=insurance_comp[older_month]),
-                        pl.graph_objects.Bar(name=newest_month, x=insurance_comp.index, y=insurance_comp[newest_month])
-                    ])
-                    fig_insurance.update_layout(
-                        barmode='group',
-                        title="Insurance Distribution Comparison",
-                        xaxis_title="Insurance",
-                        yaxis_title="Number of Procedures"
-                    )
-                    st.plotly_chart(fig_insurance, use_container_width=True)
-                    
-                    # Add pie charts for newest month composition
-                    st.subheader(f"Current Month Composition ({newest_month})")
-                    col1, col2 = st.columns(2)
-                    
-                    newest_month_data = doctor_data[doctor_data['Month'] == newest_month]
-                    
-                    with col1:
-                        # Procedure composition pie chart
-                        procedure_comp = newest_month_data['PROCEDURE'].value_counts().reset_index()
-                        procedure_comp.columns = ['PROCEDURE', 'Count']
-                        
-                        fig_procedures_pie = px.pie(
-                            procedure_comp,
-                            values='Count',
-                            names='PROCEDURE',
-                            title=f"Current Procedure Distribution - {selected_doctor}"
-                        )
-                        st.plotly_chart(fig_procedures_pie, use_container_width=True)
-                    
-                    with col2:
-                        # Insurance composition pie chart
-                        insurance_comp = newest_month_data['Data Set'].value_counts().reset_index()
-                        insurance_comp.columns = ['Insurance', 'Count']
-                        
-                        fig_insurance_pie = px.pie(
-                            insurance_comp,
-                            values='Count',
-                            names='Insurance',
-                            title=f"Current Insurance Distribution - {selected_doctor}"
-                        )
-                        st.plotly_chart(fig_insurance_pie, use_container_width=True)
-            
-            else:
-                st.warning("Please select at least one month to analyze")
-        else:
-            st.error("Please ensure the Top 200 Doctores.xlsx file is in the same directory as the app")
-
-    with tab4:
-        st.subheader("Top 200 Doctors Category Analysis")
-        
-        # Add instructions
-        st.info("""
-        📊 **Category Definitions:**
-        - **Luis Only**: Doctors exclusively assigned to Luis
-        - **Gerardo Only**: Doctors exclusively assigned to Gerardo
-        - **Shared**: Doctors assigned to both Luis and Gerardo
-        - **Unassigned**: Doctors not assigned to any representative
-        """)
-        
-        # Month selector
+with tab2:
+    # Second Tab: Two Month Comparison
+    st.subheader("Two Month Comparison")
+    
+    # Select months for comparison (limit to 2)
+    col1, col2 = st.columns([2, 1])
+    with col1:
         compare_months = st.multiselect(
             "Select Two Months to Compare",
             options=working_data['Month'].unique(),
             default=working_data['Month'].unique()[-2:],  # Default to last two months
-            max_selections=2,
-            help="First month selected will be the base month for comparison"
+            max_selections=2
+        )
+    
+    # Ensure exactly two months are selected
+    if len(compare_months) != 2:
+        st.warning("Please select exactly two months to compare")
+    else:
+        # Optional procedure filter
+        with col2:
+            procedure_filter = st.selectbox(
+                "Filter by Procedure (Optional)",
+                options=["All Procedures"] + list(working_data['PROCEDURE'].unique())
+            )
+        
+        # Filter data based on selections
+        if procedure_filter == "All Procedures":
+            compare_data = working_data[working_data['Month'].isin(compare_months)]
+        else:
+            compare_data = working_data[
+                (working_data['Month'].isin(compare_months)) & 
+                (working_data['PROCEDURE'] == procedure_filter)
+            ]
+        
+        # Monthly comparison metrics
+        st.subheader("Monthly Comparison")
+        col1, col2, col3 = st.columns(3)
+        
+        # Calculate metrics for each month
+        metrics = {}
+        for month in compare_months:
+            month_data = compare_data[compare_data['Month'] == month]
+            metrics[month] = {
+                'Total Procedures': len(month_data),
+                'Unique Physicians': month_data['REFERRING PHYSICIAN'].nunique(),
+                'Unique Insurances': month_data['Data Set'].nunique()
+            }
+        
+        # Display metrics with month-over-month comparison
+        with col1:
+            st.metric(
+                "Total Procedures",
+                metrics[compare_months[1]]['Total Procedures'],
+                metrics[compare_months[1]]['Total Procedures'] - metrics[compare_months[0]]['Total Procedures']
+            )
+        with col2:
+            st.metric(
+                "Unique Physicians",
+                metrics[compare_months[1]]['Unique Physicians'],
+                metrics[compare_months[1]]['Unique Physicians'] - metrics[compare_months[0]]['Unique Physicians']
+            )
+        with col3:
+            st.metric(
+                "Unique Insurances",
+                metrics[compare_months[1]]['Unique Insurances'],
+                metrics[compare_months[1]]['Unique Insurances'] - metrics[compare_months[0]]['Unique Insurances']
+            )
+        
+        # Top 10 Referring Doctors comparison
+        st.subheader("Top 10 Referring Doctors")
+        
+        # Get top 10 doctors from newest month
+        newest_month = compare_months[1]
+        older_month = compare_months[0]
+        
+        newest_month_data = compare_data[compare_data['Month'] == newest_month]
+        older_month_data = compare_data[compare_data['Month'] == older_month]
+        
+        # Get counts for both months
+        newest_month_counts = newest_month_data.groupby('REFERRING PHYSICIAN').size()
+        older_month_counts = older_month_data.groupby('REFERRING PHYSICIAN').size()
+        
+        # Get top 10 doctors from newest month
+        top_10_doctors = newest_month_counts.nlargest(10)
+        
+        # Create comparison dataframe with proper handling of missing doctors
+        doctor_comparison = pd.DataFrame({
+            older_month: [older_month_counts.get(doctor, 0) for doctor in top_10_doctors.index],
+            newest_month: top_10_doctors.values
+        }, index=top_10_doctors.index)
+        
+        # Create grouped bar chart
+        fig_doctors = pl.graph_objects.Figure(data=[
+            pl.graph_objects.Bar(
+                name=older_month,
+                x=doctor_comparison.index,
+                y=doctor_comparison[older_month],
+                text=doctor_comparison[older_month].round(0).astype(int),
+                textposition='auto',
+            ),
+            pl.graph_objects.Bar(
+                name=newest_month,
+                x=doctor_comparison.index,
+                y=doctor_comparison[newest_month],
+                text=doctor_comparison[newest_month].round(0).astype(int),
+                textposition='auto',
+            )
+        ])
+        
+        fig_doctors.update_layout(
+            barmode='group',
+            title=f"Top 10 Referring Doctors Comparison ({older_month} vs {newest_month})",
+            xaxis_title="Referring Physician",
+            yaxis_title="Number of Procedures",
+            showlegend=True,
+            xaxis_tickangle=45,
+            height=500
         )
         
-        if len(compare_months) == 2:
-            older_month, newest_month = compare_months
+        st.plotly_chart(fig_doctors, use_container_width=True)
+        
+        # Calculate changes for all doctors
+        all_doctors_comparison = pd.DataFrame({
+            older_month: older_month_data.groupby('REFERRING PHYSICIAN').size(),
+            newest_month: newest_month_data.groupby('REFERRING PHYSICIAN').size()
+        }).fillna(0)
+        
+        # Calculate absolute change
+        all_doctors_comparison['Change'] = all_doctors_comparison[newest_month] - all_doctors_comparison[older_month]
+        
+        # Get top 10 gainers and losers
+        gainers = all_doctors_comparison.nlargest(10, 'Change')
+        losers = all_doctors_comparison.nsmallest(10, 'Change')
+        
+        # Display gainers and losers
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Top 10 Gainers")
+            fig_gainers = pl.graph_objects.Figure(data=[
+                pl.graph_objects.Bar(
+                    x=gainers.index,
+                    y=gainers['Change'],
+                    text=gainers['Change'].round(0).astype(int),
+                    textposition='auto',
+                )
+            ])
+            fig_gainers.update_layout(
+                title=f"Largest Increases ({older_month} to {newest_month})",
+                yaxis_title="Additional Procedures",
+                xaxis_tickangle=45
+            )
+            st.plotly_chart(fig_gainers, use_container_width=True)
+        
+        with col2:
+            st.subheader("Top 10 Decreases")
+            fig_losers = pl.graph_objects.Figure(data=[
+                pl.graph_objects.Bar(
+                    x=losers.index,
+                    y=losers['Change'],
+                    text=losers['Change'].round(0).astype(int),
+                    textposition='auto',
+                )
+            ])
+            fig_losers.update_layout(
+                title=f"Largest Decreases ({older_month} to {newest_month})",
+                yaxis_title="Change in Procedures",
+                xaxis_tickangle=45
+            )
+            st.plotly_chart(fig_losers, use_container_width=True)
+        
+        # Top 10 insurances comparison
+        st.subheader("Top 10 Insurances")
+        insurance_counts = {}
+        for month in compare_months:
+            month_data = compare_data[compare_data['Month'] == month]
+            insurance_counts[month] = month_data.groupby('Data Set').size().nlargest(10)
+        
+        # Create comparison bar chart
+        insurance_comparison = pd.DataFrame({
+            compare_months[0]: insurance_counts[compare_months[0]],
+            compare_months[1]: insurance_counts[compare_months[1]]
+        }).fillna(0)
+        
+        fig_insurance = pl.graph_objects.Figure(data=[
+            pl.graph_objects.Bar(name=compare_months[0], x=insurance_comparison.index, y=insurance_comparison[compare_months[0]]),
+            pl.graph_objects.Bar(name=compare_months[1], x=insurance_comparison.index, y=insurance_comparison[compare_months[1]])
+        ])
+        fig_insurance.update_layout(
+            barmode='group',
+            title="Top 10 Insurances Comparison",
+            xaxis_title="Insurance",
+            yaxis_title="Number of Procedures"
+        )
+        st.plotly_chart(fig_insurance, use_container_width=True)
+
+with tab3:
+    if top_200_docs is not None:
+        st.subheader("Top 200 Doctors Performance and Comparison")
+        
+        # Add instructions
+        st.info("""
+        📊 **How to use this tab:**
+        - Select one month for individual analysis
+        - Select two months for comparison analysis
+        - When comparing two months, the first selected month will be the base month, and the second month will show the changes relative to the base month
+        """)
+        
+        # Doctor selector and month filter
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            selected_doctor = st.selectbox(
+                "Select Doctor",
+                options=top_200_docs['Referring Physician'].tolist()
+            )
+        with col2:
+            compare_months = st.multiselect(
+                "Select Month(s) to Analyze (Max 2)",
+                options=working_data['Month'].unique(),
+                default=[working_data['Month'].unique()[-1]],  # Default to latest month
+                max_selections=2,
+                help="First month selected will be the base month for comparison"
+            )
+        
+        if len(compare_months) > 0:
+            # Filter data for selected doctor and months
+            doctor_data = working_data[
+                (working_data['REFERRING PHYSICIAN'] == selected_doctor) &
+                (working_data['Month'].isin(compare_months))
+            ]
             
-            # Categorize doctors
-            luis_only = top_200_docs[
-                (top_200_docs['Luis '].fillna('') == 'x') & 
-                (top_200_docs['Gerardo'].fillna('') != 'x')
-            ]['Referring Physician'].tolist()
-            
-            gerardo_only = top_200_docs[
-                (top_200_docs['Luis '].fillna('') != 'x') & 
-                (top_200_docs['Gerardo'].fillna('') == 'x')
-            ]['Referring Physician'].tolist()
-            
-            shared = top_200_docs[
-                (top_200_docs['Luis '].fillna('') == 'x') & 
-                (top_200_docs['Gerardo'].fillna('') == 'x')
-            ]['Referring Physician'].tolist()
-            
-            unassigned = top_200_docs[
-                (top_200_docs['Luis '].fillna('') != 'x') & 
-                (top_200_docs['Gerardo'].fillna('') != 'x')
-            ]['Referring Physician'].tolist()
-            
-            # Calculate metrics for each category
-            categories = {
-                'Luis Only': luis_only,
-                'Gerardo Only': gerardo_only,
-                'Shared': shared,
-                'Unassigned': unassigned
-            }
-            
-            # Display category sizes and total referrals
-            st.subheader("Category Distribution")
-            col1, col2, col3, col4 = st.columns(4)
-            cols = [col1, col2, col3, col4]
-            for i, (category, doctors) in enumerate(categories.items()):
-                with cols[i]:
-                    st.metric(f"{category}", len(doctors))
-            
-            # Calculate and display total referrals per category
-            st.subheader("Total Referrals by Category")
-            col1, col2, col3, col4 = st.columns(4)
-            
-            for i, (category, doctors) in enumerate(categories.items()):
-                with cols[i]:
-                    # Get referrals for both months
-                    old_referrals = len(working_data[
-                        (working_data['Month'] == older_month) & 
-                        (working_data['REFERRING PHYSICIAN'].isin(doctors))
-                    ])
+            if len(compare_months) == 1:
+                # Single month analysis
+                month_data = doctor_data[doctor_data['Month'] == compare_months[0]]
+                
+                # Summary metrics in columns
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    total_referrals = len(month_data)
+                    st.metric("Total Procedures", total_referrals)
+                with col2:
+                    unique_procedures = month_data['PROCEDURE'].nunique()
+                    st.metric("Unique Procedures", unique_procedures)
+                with col3:
+                    unique_insurances = month_data['Data Set'].nunique()
+                    st.metric("Unique Insurances", unique_insurances)
+                
+                # Pie charts for composition
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Procedure composition pie chart
+                    procedure_comp = month_data['PROCEDURE'].value_counts().reset_index()
+                    procedure_comp.columns = ['PROCEDURE', 'Count']
                     
-                    new_referrals = len(working_data[
-                        (working_data['Month'] == newest_month) & 
-                        (working_data['REFERRING PHYSICIAN'].isin(doctors))
-                    ])
-                    
-                    # Calculate the difference
-                    difference = new_referrals - old_referrals
-                    
-                    # Display metric with delta
-                    st.metric(
-                        f"Referrals ({newest_month})",
-                        new_referrals,
-                        delta=difference,
-                        delta_color="normal"
+                    fig_procedures = px.pie(
+                        procedure_comp,
+                        values='Count',
+                        names='PROCEDURE',
+                        title=f"Procedure Distribution - {selected_doctor} ({compare_months[0]})"
                     )
-            
-            # Calculate performance metrics for each category and month
-            performance_data = []
-            for category, doctors in categories.items():
-                for month in compare_months:
-                    month_data = working_data[
-                        (working_data['Month'] == month) & 
-                        (working_data['REFERRING PHYSICIAN'].isin(doctors))
-                    ]
+                    st.plotly_chart(fig_procedures, use_container_width=True)
+                
+                with col2:
+                    # Insurance composition pie chart
+                    insurance_comp = month_data['Data Set'].value_counts().reset_index()
+                    insurance_comp.columns = ['Insurance', 'Count']
                     
-                    performance_data.append({
-                        'Category': category,
-                        'Month': month,
+                    fig_insurance = px.pie(
+                        insurance_comp,
+                        values='Count',
+                        names='Insurance',
+                        title=f"Insurance Distribution - {selected_doctor} ({compare_months[0]})"
+                    )
+                    st.plotly_chart(fig_insurance, use_container_width=True)
+                
+            else:  # Two month comparison
+                newest_month = compare_months[1]
+                older_month = compare_months[0]
+                
+                # Calculate metrics for both months
+                metrics = {}
+                for month in compare_months:
+                    month_data = doctor_data[doctor_data['Month'] == month]
+                    metrics[month] = {
                         'Total Procedures': len(month_data),
-                        'Unique Doctors Active': month_data['REFERRING PHYSICIAN'].nunique(),
-                        'Avg Procedures per Doctor': len(month_data) / len(doctors) if len(doctors) > 0 else 0,
-                        'Unique Insurances': month_data['Data Set'].nunique(),
-                    })
-            
-            performance_df = pd.DataFrame(performance_data)
-            
-            # Create visualization for key metrics
-            st.subheader("Category Performance Comparison")
-            
-            # Total Procedures by Category
-            fig_procedures = pl.graph_objects.Figure()
+                        'Unique Procedures': month_data['PROCEDURE'].nunique(),
+                        'Unique Insurances': month_data['Data Set'].nunique()
+                    }
+                
+                # Display metrics with month-over-month comparison
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Total Procedures",
+                        metrics[newest_month]['Total Procedures'],
+                        metrics[newest_month]['Total Procedures'] - metrics[older_month]['Total Procedures']
+                    )
+                with col2:
+                    st.metric(
+                        "Unique Procedures",
+                        metrics[newest_month]['Unique Procedures'],
+                        metrics[newest_month]['Unique Procedures'] - metrics[older_month]['Unique Procedures']
+                    )
+                with col3:
+                    st.metric(
+                        "Unique Insurances",
+                        metrics[newest_month]['Unique Insurances'],
+                        metrics[newest_month]['Unique Insurances'] - metrics[older_month]['Unique Insurances']
+                    )
+                
+                # Create comparison bar charts
+                st.subheader(f"Monthly Comparison - {selected_doctor}")
+                
+                # Procedures by type comparison
+                procedures_comp = pd.DataFrame({
+                    older_month: doctor_data[doctor_data['Month'] == older_month]['PROCEDURE'].value_counts(),
+                    newest_month: doctor_data[doctor_data['Month'] == newest_month]['PROCEDURE'].value_counts()
+                }).fillna(0)
+                
+                fig_procedures = pl.graph_objects.Figure(data=[
+                    pl.graph_objects.Bar(name=older_month, x=procedures_comp.index, y=procedures_comp[older_month]),
+                    pl.graph_objects.Bar(name=newest_month, x=procedures_comp.index, y=procedures_comp[newest_month])
+                ])
+                fig_procedures.update_layout(
+                    barmode='group',
+                    title="Procedures Comparison",
+                    xaxis_title="Procedure Type",
+                    yaxis_title="Number of Procedures"
+                )
+                st.plotly_chart(fig_procedures, use_container_width=True)
+                
+                # Insurance comparison
+                insurance_comp = pd.DataFrame({
+                    older_month: doctor_data[doctor_data['Month'] == older_month]['Data Set'].value_counts(),
+                    newest_month: doctor_data[doctor_data['Month'] == newest_month]['Data Set'].value_counts()
+                }).fillna(0)
+                
+                fig_insurance = pl.graph_objects.Figure(data=[
+                    pl.graph_objects.Bar(name=older_month, x=insurance_comp.index, y=insurance_comp[older_month]),
+                    pl.graph_objects.Bar(name=newest_month, x=insurance_comp.index, y=insurance_comp[newest_month])
+                ])
+                fig_insurance.update_layout(
+                    barmode='group',
+                    title="Insurance Distribution Comparison",
+                    xaxis_title="Insurance",
+                    yaxis_title="Number of Procedures"
+                )
+                st.plotly_chart(fig_insurance, use_container_width=True)
+                
+                # Add pie charts for newest month composition
+                st.subheader(f"Current Month Composition ({newest_month})")
+                col1, col2 = st.columns(2)
+                
+                newest_month_data = doctor_data[doctor_data['Month'] == newest_month]
+                
+                with col1:
+                    # Procedure composition pie chart
+                    procedure_comp = newest_month_data['PROCEDURE'].value_counts().reset_index()
+                    procedure_comp.columns = ['PROCEDURE', 'Count']
+                    
+                    fig_procedures_pie = px.pie(
+                        procedure_comp,
+                        values='Count',
+                        names='PROCEDURE',
+                        title=f"Current Procedure Distribution - {selected_doctor}"
+                    )
+                    st.plotly_chart(fig_procedures_pie, use_container_width=True)
+                
+                with col2:
+                    # Insurance composition pie chart
+                    insurance_comp = newest_month_data['Data Set'].value_counts().reset_index()
+                    insurance_comp.columns = ['Insurance', 'Count']
+                    
+                    fig_insurance_pie = px.pie(
+                        insurance_comp,
+                        values='Count',
+                        names='Insurance',
+                        title=f"Current Insurance Distribution - {selected_doctor}"
+                    )
+                    st.plotly_chart(fig_insurance_pie, use_container_width=True)
+        
+        else:
+            st.warning("Please select at least one month to analyze")
+    else:
+        st.error("Please ensure the Top 200 Doctores.xlsx file is in the same directory as the app")
+
+with tab4:
+    st.subheader("Top 200 Doctors Category Analysis")
+    
+    # Add instructions
+    st.info("""
+    📊 **Category Definitions:**
+    - **Luis Only**: Doctors exclusively assigned to Luis
+    - **Gerardo Only**: Doctors exclusively assigned to Gerardo
+    - **Shared**: Doctors assigned to both Luis and Gerardo
+    - **Unassigned**: Doctors not assigned to any representative
+    """)
+    
+    # Month selector
+    compare_months = st.multiselect(
+        "Select Two Months to Compare",
+        options=working_data['Month'].unique(),
+        default=working_data['Month'].unique()[-2:],  # Default to last two months
+        max_selections=2,
+        help="First month selected will be the base month for comparison"
+    )
+    
+    if len(compare_months) == 2:
+        older_month, newest_month = compare_months
+        
+        # Categorize doctors
+        luis_only = top_200_docs[
+            (top_200_docs['Luis '].fillna('') == 'x') & 
+            (top_200_docs['Gerardo'].fillna('') != 'x')
+        ]['Referring Physician'].tolist()
+        
+        gerardo_only = top_200_docs[
+            (top_200_docs['Luis '].fillna('') != 'x') & 
+            (top_200_docs['Gerardo'].fillna('') == 'x')
+        ]['Referring Physician'].tolist()
+        
+        shared = top_200_docs[
+            (top_200_docs['Luis '].fillna('') == 'x') & 
+            (top_200_docs['Gerardo'].fillna('') == 'x')
+        ]['Referring Physician'].tolist()
+        
+        unassigned = top_200_docs[
+            (top_200_docs['Luis '].fillna('') != 'x') & 
+            (top_200_docs['Gerardo'].fillna('') != 'x')
+        ]['Referring Physician'].tolist()
+        
+        # Calculate metrics for each category
+        categories = {
+            'Luis Only': luis_only,
+            'Gerardo Only': gerardo_only,
+            'Shared': shared,
+            'Unassigned': unassigned
+        }
+        
+        # Display category sizes and total referrals
+        st.subheader("Category Distribution")
+        col1, col2, col3, col4 = st.columns(4)
+        cols = [col1, col2, col3, col4]
+        for i, (category, doctors) in enumerate(categories.items()):
+            with cols[i]:
+                st.metric(f"{category}", len(doctors))
+        
+        # Calculate and display total referrals per category
+        st.subheader("Total Referrals by Category")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        for i, (category, doctors) in enumerate(categories.items()):
+            with cols[i]:
+                # Get referrals for both months
+                old_referrals = len(working_data[
+                    (working_data['Month'] == older_month) & 
+                    (working_data['REFERRING PHYSICIAN'].isin(doctors))
+                ])
+                
+                new_referrals = len(working_data[
+                    (working_data['Month'] == newest_month) & 
+                    (working_data['REFERRING PHYSICIAN'].isin(doctors))
+                ])
+                
+                # Calculate the difference
+                difference = new_referrals - old_referrals
+                
+                # Display metric with delta
+                st.metric(
+                    f"Referrals ({newest_month})",
+                    new_referrals,
+                    delta=difference,
+                    delta_color="normal"
+                )
+        
+        # Calculate performance metrics for each category and month
+        performance_data = []
+        for category, doctors in categories.items():
+            for month in compare_months:
+                month_data = working_data[
+                    (working_data['Month'] == month) & 
+                    (working_data['REFERRING PHYSICIAN'].isin(doctors))
+                ]
+                
+                performance_data.append({
+                    'Category': category,
+                    'Month': month,
+                    'Total Procedures': len(month_data),
+                    'Unique Doctors Active': month_data['REFERRING PHYSICIAN'].nunique(),
+                    'Avg Procedures per Doctor': len(month_data) / len(doctors) if len(doctors) > 0 else 0,
+                    'Unique Insurances': month_data['Data Set'].nunique(),
+                })
+        
+        performance_df = pd.DataFrame(performance_data)
+        
+        # Create visualization for key metrics
+        st.subheader("Category Performance Comparison")
+        
+        # Total Procedures by Category
+        fig_procedures = pl.graph_objects.Figure()
+        for category in categories.keys():
+            category_data = performance_df[performance_df['Category'] == category]
+            fig_procedures.add_trace(pl.graph_objects.Bar(
+                name=category,
+                x=category_data['Month'],
+                y=category_data['Total Procedures'],
+                text=category_data['Total Procedures'],
+                textposition='auto',
+            ))
+        
+        fig_procedures.update_layout(
+            title="Total Procedures by Category",
+            barmode='group',
+            yaxis_title="Number of Procedures"
+        )
+        st.plotly_chart(fig_procedures, use_container_width=True)
+        
+        # Average Procedures per Doctor
+        col1, col2 = st.columns(2)
+        with col1:
+            fig_avg = pl.graph_objects.Figure()
             for category in categories.keys():
                 category_data = performance_df[performance_df['Category'] == category]
-                fig_procedures.add_trace(pl.graph_objects.Bar(
+                fig_avg.add_trace(pl.graph_objects.Bar(
                     name=category,
                     x=category_data['Month'],
-                    y=category_data['Total Procedures'],
-                    text=category_data['Total Procedures'],
+                    y=category_data['Avg Procedures per Doctor'],
+                    text=category_data['Avg Procedures per Doctor'].round(1),
                     textposition='auto',
                 ))
             
-            fig_procedures.update_layout(
-                title="Total Procedures by Category",
+            fig_avg.update_layout(
+                title="Average Procedures per Doctor",
                 barmode='group',
-                yaxis_title="Number of Procedures"
+                yaxis_title="Average Procedures"
             )
-            st.plotly_chart(fig_procedures, use_container_width=True)
-            
-            # Average Procedures per Doctor
-            col1, col2 = st.columns(2)
-            with col1:
-                fig_avg = pl.graph_objects.Figure()
-                for category in categories.keys():
-                    category_data = performance_df[performance_df['Category'] == category]
-                    fig_avg.add_trace(pl.graph_objects.Bar(
-                        name=category,
-                        x=category_data['Month'],
-                        y=category_data['Avg Procedures per Doctor'],
-                        text=category_data['Avg Procedures per Doctor'].round(1),
-                        textposition='auto',
-                    ))
-                
-                fig_avg.update_layout(
-                    title="Average Procedures per Doctor",
-                    barmode='group',
-                    yaxis_title="Average Procedures"
-                )
-                st.plotly_chart(fig_avg, use_container_width=True)
-            
-            with col2:
-                fig_active = pl.graph_objects.Figure()
-                for category in categories.keys():
-                    category_data = performance_df[performance_df['Category'] == category]
-                    fig_active.add_trace(pl.graph_objects.Bar(
-                        name=category,
-                        x=category_data['Month'],
-                        y=category_data['Unique Doctors Active'],
-                        text=category_data['Unique Doctors Active'],
-                        textposition='auto',
-                    ))
-                
-                fig_active.update_layout(
-                    title="Active Doctors by Category",
-                    barmode='group',
-                    yaxis_title="Number of Active Doctors"
-                )
-                st.plotly_chart(fig_active, use_container_width=True)
-            
-            # Summary table
-            st.subheader("Detailed Performance Metrics")
-            summary_table = performance_df.pivot(
-                index='Category',
-                columns='Month',
-                values=['Total Procedures', 'Unique Doctors Active', 'Avg Procedures per Doctor']
-            ).round(2)
-            st.dataframe(summary_table)
+            st.plotly_chart(fig_avg, use_container_width=True)
         
-        else:
-            st.warning("Please select exactly two months for comparison")
-
-else:
-    st.info("Please upload a data file to begin.")
+        with col2:
+            fig_active = pl.graph_objects.Figure()
+            for category in categories.keys():
+                category_data = performance_df[performance_df['Category'] == category]
+                fig_active.add_trace(pl.graph_objects.Bar(
+                    name=category,
+                    x=category_data['Month'],
+                    y=category_data['Unique Doctors Active'],
+                    text=category_data['Unique Doctors Active'],
+                    textposition='auto',
+                ))
+            
+            fig_active.update_layout(
+                title="Active Doctors by Category",
+                barmode='group',
+                yaxis_title="Number of Active Doctors"
+            )
+            st.plotly_chart(fig_active, use_container_width=True)
+        
+        # Summary table
+        st.subheader("Detailed Performance Metrics")
+        summary_table = performance_df.pivot(
+            index='Category',
+            columns='Month',
+            values=['Total Procedures', 'Unique Doctors Active', 'Avg Procedures per Doctor']
+        ).round(2)
+        st.dataframe(summary_table)
+    
+    else:
+        st.warning("Please select exactly two months for comparison")
