@@ -510,8 +510,18 @@ with tab2:
         }).fillna(0)
         
         fig_insurance = pl.graph_objects.Figure(data=[
-            pl.graph_objects.Bar(name=compare_months[0], x=insurance_comparison.index, y=insurance_comparison[compare_months[0]], color=COLOR_SCHEME[0]),
-            pl.graph_objects.Bar(name=compare_months[1], x=insurance_comparison.index, y=insurance_comparison[compare_months[1]], color=COLOR_SCHEME[1])
+            pl.graph_objects.Bar(
+                name=compare_months[0], 
+                x=insurance_comparison.index, 
+                y=insurance_comparison[compare_months[0]], 
+                marker_color=COLOR_SCHEME[0]
+            ),
+            pl.graph_objects.Bar(
+                name=compare_months[1], 
+                x=insurance_comparison.index, 
+                y=insurance_comparison[compare_months[1]], 
+                marker_color=COLOR_SCHEME[1]
+            )
         ])
         fig_insurance.update_layout(
             barmode='group',
