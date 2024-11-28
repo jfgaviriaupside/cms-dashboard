@@ -2,10 +2,20 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly as pl
+from datetime import datetime
+import pytz
 
 # Initial setup
 st.set_page_config(page_title="CMS Performance Dashboard", layout="wide")
 st.title("CMS Performance Dashboard")
+
+# Define consistent color scheme
+COLOR_SCHEME = px.colors.qualitative.Set3  # or any other color scheme you prefer
+
+# Add timestamp
+mexico_tz = pytz.timezone('America/Mexico_City')
+current_time = datetime.now(mexico_tz)
+st.caption(f"Last Updated: {current_time.strftime('%Y-%m-%d %I:%M %p %Z')}")
 
 # Load base data
 @st.cache_data
@@ -102,51 +112,52 @@ if base_data is not None:
     )
 
     if uploaded_file:
-        # Load new data
-        try:
-            if uploaded_file.name.endswith(".xlsx"):
-                new_data = pd.read_excel(uploaded_file)
-            else:
-                new_data = pd.read_csv(uploaded_file)
-            
-            st.info(f"Attempting to process {len(new_data):,} new records...")
-            
-            # Validate new data
-            if validate_data(new_data, base_data):
-                # Combine data
-                data = pd.concat([base_data, new_data], ignore_index=True)
+        with st.spinner('Processing uploaded data...'):
+            # Load new data
+            try:
+                if uploaded_file.name.endswith(".xlsx"):
+                    new_data = pd.read_excel(uploaded_file)
+                else:
+                    new_data = pd.read_csv(uploaded_file)
                 
-                # Remove duplicates if any
-                initial_len = len(data)
-                data = data.drop_duplicates()
-                duplicates_removed = initial_len - len(data)
+                st.info(f"Attempting to process {len(new_data):,} new records...")
                 
-                # Sort by date
-                data = data.sort_values('TRANSFORMED DATE')
-                
-                st.success(f"""
-                Successfully processed new data:
-                - Records added: {len(new_data):,}
-                - Duplicates removed: {duplicates_removed:,}
-                - Total records now: {len(data):,}
-                """)
-                
-                # Display summary of new data
-                st.write("Summary of new data:")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("New Records", f"{len(new_data):,}")
-                with col2:
-                    st.metric("Date Range", f"{new_data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {new_data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}")
-                with col3:
-                    st.metric("Unique Doctors", f"{new_data['REFERRING PHYSICIAN'].nunique():,}")
-            else:
-                st.error("Please fix the data format issues before proceeding")
+                # Validate new data
+                if validate_data(new_data, base_data):
+                    # Combine data
+                    data = pd.concat([base_data, new_data], ignore_index=True)
+                    
+                    # Remove duplicates if any
+                    initial_len = len(data)
+                    data = data.drop_duplicates()
+                    duplicates_removed = initial_len - len(data)
+                    
+                    # Sort by date
+                    data = data.sort_values('TRANSFORMED DATE')
+                    
+                    st.success(f"""
+                    Successfully processed new data:
+                    - Records added: {len(new_data):,}
+                    - Duplicates removed: {duplicates_removed:,}
+                    - Total records now: {len(data):,}
+                    """)
+                    
+                    # Display summary of new data
+                    st.write("Summary of new data:")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("New Records", f"{len(new_data):,}")
+                    with col2:
+                        st.metric("Date Range", f"{new_data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {new_data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}")
+                    with col3:
+                        st.metric("Unique Doctors", f"{new_data['REFERRING PHYSICIAN'].nunique():,}")
+                else:
+                    st.error("Please fix the data format issues before proceeding")
+                    st.stop()
+                    
+            except Exception as e:
+                st.error(f"Error processing uploaded file: {str(e)}")
                 st.stop()
-                
-        except Exception as e:
-            st.error(f"Error processing uploaded file: {str(e)}")
-            st.stop()
     else:
         # If no new data uploaded, use base data
         data = base_data.copy()
@@ -237,7 +248,8 @@ with tab1:
     fig = px.bar(filtered_data, 
                 x='PROCEDURE', 
                 y='Count', 
-                title=f"Procedures Count for {selected_month}")
+                title=f"Procedures Count for {selected_month}",
+                color_discrete_sequence=COLOR_SCHEME)
     st.plotly_chart(fig, use_container_width=True)
     
     # Top Referring Doctors
@@ -253,7 +265,8 @@ with tab1:
     fig_doctors = px.bar(top_doctors, 
                        x='REFERRING PHYSICIAN', 
                        y='Count', 
-                       title=f"Top 10 Referring Doctors - {selected_month}")
+                       title=f"Top 10 Referring Doctors - {selected_month}",
+                       color_discrete_sequence=COLOR_SCHEME)
     st.plotly_chart(fig_doctors, use_container_width=True)
     
     # Top Insurances
@@ -269,7 +282,8 @@ with tab1:
     fig_insurances = px.pie(top_insurances, 
                           names='Data Set', 
                           values='Count', 
-                          title=f"Top 10 Insurances by Procedure Count - {selected_month}")
+                          title=f"Top 10 Insurances by Procedure Count - {selected_month}",
+                          color_discrete_sequence=COLOR_SCHEME)
     st.plotly_chart(fig_insurances, use_container_width=True)
 
 with tab2:
@@ -339,12 +353,22 @@ with tab2:
         
         # Display metrics with month-over-month comparison
         with col1:
+            pct_change = calculate_percentage_change(
+                metrics[compare_months[0]]['Total Procedures'],
+                metrics[compare_months[1]]['Total Procedures']
+            )
+            delta_text = f"{metrics[compare_months[1]]['Total Procedures'] - metrics[compare_months[0]]['Total Procedures']} ({pct_change:.1f}%)" if pct_change is not None else "N/A"
             st.metric(
                 "Total Procedures",
                 metrics[compare_months[1]]['Total Procedures'],
-                metrics[compare_months[1]]['Total Procedures'] - metrics[compare_months[0]]['Total Procedures']
+                delta=delta_text
             )
         with col2:
+            pct_change = calculate_percentage_change(
+                metrics[compare_months[0]]['Unique Physicians'],
+                metrics[compare_months[1]]['Unique Physicians']
+            )
+            delta_text = f"{metrics[compare_months[1]]['Unique Physicians'] - metrics[compare_months[0]]['Unique Physicians']} ({pct_change:.1f}%)" if pct_change is not None else "N/A"
             st.metric(
                 "Unique Physicians",
                 metrics[compare_months[1]]['Unique Physicians'],
@@ -388,6 +412,7 @@ with tab2:
                 y=doctor_comparison[older_month],
                 text=doctor_comparison[older_month].round(0).astype(int),
                 textposition='auto',
+                marker_color=COLOR_SCHEME[0]
             ),
             pl.graph_objects.Bar(
                 name=newest_month,
@@ -395,6 +420,7 @@ with tab2:
                 y=doctor_comparison[newest_month],
                 text=doctor_comparison[newest_month].round(0).astype(int),
                 textposition='auto',
+                marker_color=COLOR_SCHEME[1]
             )
         ])
         
@@ -434,6 +460,7 @@ with tab2:
                     y=gainers['Change'],
                     text=gainers['Change'].round(0).astype(int),
                     textposition='auto',
+                    marker_color=COLOR_SCHEME[0]
                 )
             ])
             fig_gainers.update_layout(
@@ -451,6 +478,7 @@ with tab2:
                     y=losers['Change'],
                     text=losers['Change'].round(0).astype(int),
                     textposition='auto',
+                    marker_color=COLOR_SCHEME[1]
                 )
             ])
             fig_losers.update_layout(
@@ -474,8 +502,8 @@ with tab2:
         }).fillna(0)
         
         fig_insurance = pl.graph_objects.Figure(data=[
-            pl.graph_objects.Bar(name=compare_months[0], x=insurance_comparison.index, y=insurance_comparison[compare_months[0]]),
-            pl.graph_objects.Bar(name=compare_months[1], x=insurance_comparison.index, y=insurance_comparison[compare_months[1]])
+            pl.graph_objects.Bar(name=compare_months[0], x=insurance_comparison.index, y=insurance_comparison[compare_months[0]], color=COLOR_SCHEME[0]),
+            pl.graph_objects.Bar(name=compare_months[1], x=insurance_comparison.index, y=insurance_comparison[compare_months[1]], color=COLOR_SCHEME[1])
         ])
         fig_insurance.update_layout(
             barmode='group',
@@ -548,7 +576,8 @@ with tab3:
                         procedure_comp,
                         values='Count',
                         names='PROCEDURE',
-                        title=f"Procedure Distribution - {selected_doctor} ({compare_months[0]})"
+                        title=f"Procedure Distribution - {selected_doctor} ({compare_months[0]})",
+                        color_discrete_sequence=COLOR_SCHEME
                     )
                     st.plotly_chart(fig_procedures, use_container_width=True)
                 
@@ -561,7 +590,8 @@ with tab3:
                         insurance_comp,
                         values='Count',
                         names='Insurance',
-                        title=f"Insurance Distribution - {selected_doctor} ({compare_months[0]})"
+                        title=f"Insurance Distribution - {selected_doctor} ({compare_months[0]})",
+                        color_discrete_sequence=COLOR_SCHEME
                     )
                     st.plotly_chart(fig_insurance, use_container_width=True)
                 
@@ -610,8 +640,8 @@ with tab3:
                 }).fillna(0)
                 
                 fig_procedures = pl.graph_objects.Figure(data=[
-                    pl.graph_objects.Bar(name=older_month, x=procedures_comp.index, y=procedures_comp[older_month]),
-                    pl.graph_objects.Bar(name=newest_month, x=procedures_comp.index, y=procedures_comp[newest_month])
+                    pl.graph_objects.Bar(name=older_month, x=procedures_comp.index, y=procedures_comp[older_month], color=COLOR_SCHEME[0]),
+                    pl.graph_objects.Bar(name=newest_month, x=procedures_comp.index, y=procedures_comp[newest_month], color=COLOR_SCHEME[1])
                 ])
                 fig_procedures.update_layout(
                     barmode='group',
@@ -628,8 +658,8 @@ with tab3:
                 }).fillna(0)
                 
                 fig_insurance = pl.graph_objects.Figure(data=[
-                    pl.graph_objects.Bar(name=older_month, x=insurance_comp.index, y=insurance_comp[older_month]),
-                    pl.graph_objects.Bar(name=newest_month, x=insurance_comp.index, y=insurance_comp[newest_month])
+                    pl.graph_objects.Bar(name=older_month, x=insurance_comp.index, y=insurance_comp[older_month], color=COLOR_SCHEME[0]),
+                    pl.graph_objects.Bar(name=newest_month, x=insurance_comp.index, y=insurance_comp[newest_month], color=COLOR_SCHEME[1])
                 ])
                 fig_insurance.update_layout(
                     barmode='group',
@@ -654,7 +684,8 @@ with tab3:
                         procedure_comp,
                         values='Count',
                         names='PROCEDURE',
-                        title=f"Current Procedure Distribution - {selected_doctor}"
+                        title=f"Current Procedure Distribution - {selected_doctor}",
+                        color_discrete_sequence=COLOR_SCHEME
                     )
                     st.plotly_chart(fig_procedures_pie, use_container_width=True)
                 
@@ -667,7 +698,8 @@ with tab3:
                         insurance_comp,
                         values='Count',
                         names='Insurance',
-                        title=f"Current Insurance Distribution - {selected_doctor}"
+                        title=f"Current Insurance Distribution - {selected_doctor}",
+                        color_discrete_sequence=COLOR_SCHEME
                     )
                     st.plotly_chart(fig_insurance_pie, use_container_width=True)
         
@@ -798,6 +830,7 @@ with tab4:
                 y=category_data['Total Procedures'],
                 text=category_data['Total Procedures'],
                 textposition='auto',
+                marker_color=COLOR_SCHEME[categories.index(category)]
             ))
         
         fig_procedures.update_layout(
@@ -819,6 +852,7 @@ with tab4:
                     y=category_data['Avg Procedures per Doctor'],
                     text=category_data['Avg Procedures per Doctor'].round(1),
                     textposition='auto',
+                    marker_color=COLOR_SCHEME[categories.index(category)]
                 ))
             
             fig_avg.update_layout(
@@ -838,6 +872,7 @@ with tab4:
                     y=category_data['Unique Doctors Active'],
                     text=category_data['Unique Doctors Active'],
                     textposition='auto',
+                    marker_color=COLOR_SCHEME[categories.index(category)]
                 ))
             
             fig_active.update_layout(
@@ -858,3 +893,47 @@ with tab4:
     
     else:
         st.warning("Please select exactly two months for comparison")
+
+# Add this function after imports
+def add_back_to_top():
+    js = '''
+    <script>
+        var mybutton = document.createElement("button");
+        mybutton.innerHTML = "↑ Back to Top";
+        mybutton.style.position = "fixed";
+        mybutton.style.bottom = "20px";
+        mybutton.style.right = "30px";
+        mybutton.style.zIndex = "99";
+        mybutton.style.border = "none";
+        mybutton.style.outline = "none";
+        mybutton.style.backgroundColor = "#0E1117";
+        mybutton.style.color = "white";
+        mybutton.style.cursor = "pointer";
+        mybutton.style.padding = "15px";
+        mybutton.style.borderRadius = "4px";
+        mybutton.style.fontSize = "18px";
+
+        // When scrolling down 20px, show the button
+        window.onscroll = function() {scrollFunction()};
+
+        function scrollFunction() {
+            if (document.body.scrollTop > 20 || document.documentElement.scrollTop > 20) {
+                mybutton.style.display = "block";
+            } else {
+                mybutton.style.display = "none";
+            }
+        }
+
+        // Add click event
+        mybutton.addEventListener("click", function() {
+            document.body.scrollTop = 0; // For Safari
+            document.documentElement.scrollTop = 0; // For Chrome, Firefox, IE and Opera
+        });
+
+        document.body.appendChild(mybutton);
+    </script>
+    '''
+    st.components.v1.html(js, height=0)
+
+# Add this at the end of your main code
+add_back_to_top()
