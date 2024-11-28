@@ -840,7 +840,7 @@ with tab4:
         
         # Total Procedures by Category
         fig_procedures = pl.graph_objects.Figure()
-        for category in categories.keys():
+        for i, (category, doctors) in enumerate(categories.items()):
             category_data = performance_df[performance_df['Category'] == category]
             fig_procedures.add_trace(pl.graph_objects.Bar(
                 name=category,
@@ -848,7 +848,7 @@ with tab4:
                 y=category_data['Total Procedures'],
                 text=category_data['Total Procedures'],
                 textposition='auto',
-                marker_color=COLOR_SCHEME[categories.index(category)]
+                marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
             ))
         
         fig_procedures.update_layout(
@@ -859,46 +859,44 @@ with tab4:
         st.plotly_chart(fig_procedures, use_container_width=True)
         
         # Average Procedures per Doctor
-        col1, col2 = st.columns(2)
-        with col1:
-            fig_avg = pl.graph_objects.Figure()
-            for category in categories.keys():
-                category_data = performance_df[performance_df['Category'] == category]
-                fig_avg.add_trace(pl.graph_objects.Bar(
-                    name=category,
-                    x=category_data['Month'],
-                    y=category_data['Avg Procedures per Doctor'],
-                    text=category_data['Avg Procedures per Doctor'].round(1),
-                    textposition='auto',
-                    marker_color=COLOR_SCHEME[categories.index(category)]
-                ))
-            
-            fig_avg.update_layout(
-                title="Average Procedures per Doctor",
-                barmode='group',
-                yaxis_title="Average Procedures"
-            )
-            st.plotly_chart(fig_avg, use_container_width=True)
+        fig_avg = pl.graph_objects.Figure()
+        for i, (category, doctors) in enumerate(categories.items()):
+            category_data = performance_df[performance_df['Category'] == category]
+            fig_avg.add_trace(pl.graph_objects.Bar(
+                name=category,
+                x=category_data['Month'],
+                y=category_data['Avg Procedures per Doctor'],
+                text=category_data['Avg Procedures per Doctor'].round(1),
+                textposition='auto',
+                marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
+            ))
         
-        with col2:
-            fig_active = pl.graph_objects.Figure()
-            for category in categories.keys():
-                category_data = performance_df[performance_df['Category'] == category]
-                fig_active.add_trace(pl.graph_objects.Bar(
-                    name=category,
-                    x=category_data['Month'],
-                    y=category_data['Unique Doctors Active'],
-                    text=category_data['Unique Doctors Active'],
-                    textposition='auto',
-                    marker_color=COLOR_SCHEME[categories.index(category)]
-                ))
-            
-            fig_active.update_layout(
-                title="Active Doctors by Category",
-                barmode='group',
-                yaxis_title="Number of Active Doctors"
-            )
-            st.plotly_chart(fig_active, use_container_width=True)
+        fig_avg.update_layout(
+            title="Average Procedures per Doctor",
+            barmode='group',
+            yaxis_title="Average Procedures"
+        )
+        st.plotly_chart(fig_avg, use_container_width=True)
+        
+        # Active Doctors
+        fig_active = pl.graph_objects.Figure()
+        for i, (category, doctors) in enumerate(categories.items()):
+            category_data = performance_df[performance_df['Category'] == category]
+            fig_active.add_trace(pl.graph_objects.Bar(
+                name=category,
+                x=category_data['Month'],
+                y=category_data['Unique Doctors Active'],
+                text=category_data['Unique Doctors Active'],
+                textposition='auto',
+                marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
+            ))
+        
+        fig_active.update_layout(
+            title="Active Doctors by Category",
+            barmode='group',
+            yaxis_title="Number of Active Doctors"
+        )
+        st.plotly_chart(fig_active, use_container_width=True)
         
         # Summary table
         st.subheader("Detailed Performance Metrics")
