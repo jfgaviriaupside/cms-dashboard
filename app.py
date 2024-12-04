@@ -30,7 +30,7 @@ def calculate_percentage_change(old_value, new_value):
 def load_base_data():
     try:
         # Attempt to load the base data file
-        base_data = pd.read_excel("base_data (3).xlsx")
+        base_data = pd.read_excel("base_data.xlsx")
         
         # Verify the required columns exist
         required_columns = ['TRANSFORMED DATE', 'PROCEDURE', 'REFERRING PHYSICIAN', 'Data Set']
@@ -546,7 +546,7 @@ with tab2:
         st.plotly_chart(fig_insurance, use_container_width=True)
 
 with tab3:
-    if top_200_docs is not None:
+    if top_200_docs is not None and responsible_column is not None:
         st.subheader("Top 200 Doctors Performance and Comparison")
         
         # Add instructions
@@ -557,20 +557,27 @@ with tab3:
         - When comparing two months, the first selected month will be the base month, and the second month will show the changes relative to the base month
         """)
         
+        # Create a mapping of doctors to their representatives
+        doctor_to_rep = dict(zip(top_200_docs['Referring Physician'], top_200_docs[responsible_column]))
+        
         # Doctor selector and month filter
-        col1, col2 = st.columns([2, 1])
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             selected_doctor = st.selectbox(
                 "Select Doctor",
-                options=top_200_docs['Referring Physician'].tolist()
+                options=top_200_docs['Referring Physician'].tolist(),
+                key="doctor_selectbox_tab3"
             )
         with col2:
+            st.info(f"Representative: **{doctor_to_rep[selected_doctor]}**")
+        with col3:
             compare_months = st.multiselect(
                 "Select Month(s) to Analyze (Max 2)",
                 options=working_data['Month'].unique(),
-                default=[working_data['Month'].unique()[-1]],  # Default to latest month
+                default=[working_data['Month'].unique()[-1]],
                 max_selections=2,
-                help="First month selected will be the base month for comparison"
+                help="First month selected will be the base month for comparison",
+                key="month_multiselect_tab3"
             )
         
         if len(compare_months) > 0:
