@@ -74,19 +74,16 @@ def load_top_200_docs():
         
         if responsible_column is None:
             st.error("Could not find the responsible person column in the Top 200 Doctors file.")
-            return None
+            return None, None
         
-        # Store the correct column name for later use
-        top_200['correct_responsible_column'] = responsible_column
-        
-        return top_200
+        return top_200, responsible_column
     except Exception as e:
         st.error(f"Error loading Top 200 Doctors file: {str(e)}")
-        return None
+        return None, None
 
 # Load base data
 base_data = load_base_data()
-top_200_docs = load_top_200_docs()
+top_200_docs, responsible_column = load_top_200_docs()
 
 # Function to validate new data
 def validate_data(new_data, base_data):
@@ -764,182 +761,182 @@ with tab3:
         st.error("Please ensure the Top 200 Doctores.xlsx file is in the same directory as the app")
 
 with tab4:
-    st.subheader("Top 200 Doctors Representative Analysis")
-    
-    # Add instructions
-    st.info("""
-    📊 **Representative Categories:**
-    - **Alex**: Doctors assigned to Alex
-    - **Luis**: Doctors assigned to Luis  
-    - **Gerardo**: Doctors assigned to Gerardo
-    """)
-    
-    # Month selector
-    compare_months = st.multiselect(
-        "Select Two Months to Compare",
-        options=working_data['Month'].unique(),
-        default=working_data['Month'].unique()[-2:],  # Default to last two months
-        max_selections=2,
-        help="First month selected will be the base month for comparison"
-    )
-    
-    if len(compare_months) == 2:
-        older_month, newest_month = compare_months
+    if top_200_docs is not None and responsible_column is not None:
+        st.subheader("Top 200 Doctors Representative Analysis")
         
-        # Get the correct column name
-        responsible_column = top_200_docs['correct_responsible_column'].iloc[0]
+        # Add instructions
+        st.info("""
+        📊 **Representative Categories:**
+        - **Alex**: Doctors assigned to Alex
+        - **Luis**: Doctors assigned to Luis  
+        - **Gerardo**: Doctors assigned to Gerardo
+        """)
         
-        # Categorize doctors by representative
-        alex_docs = top_200_docs[
-            top_200_docs[responsible_column] == 'ALEX'
-        ]['Referring Physician'].tolist()
-        
-        luis_docs = top_200_docs[
-            top_200_docs[responsible_column] == 'LUIS'
-        ]['Referring Physician'].tolist()
-        
-        gerardo_docs = top_200_docs[
-            top_200_docs[responsible_column] == 'GERARDO'
-        ]['Referring Physician'].tolist()
-        
-        # Calculate metrics for each category
-        categories = {
-            'Alex': alex_docs,
-            'Luis': luis_docs,
-            'Gerardo': gerardo_docs
-        }
-        
-        # Display category sizes and total referrals
-        st.subheader("Number of Doctors Assigned to Each Representative")
-        col1, col2, col3 = st.columns(3)
-        cols = [col1, col2, col3]
-        for i, (category, doctors) in enumerate(categories.items()):
-            with cols[i]:
-                st.metric(f"{category}", len(doctors))
-        
-        # Calculate and display total referrals per category
-        st.subheader("Total Referrals by Doctors Assigned")
-        col1, col2, col3 = st.columns(3)
-        cols = [col1, col2, col3]
-        
-        for i, (category, doctors) in enumerate(categories.items()):
-            with cols[i]:
-                # Get referrals for both months
-                old_referrals = len(working_data[
-                    (working_data['Month'] == older_month) & 
-                    (working_data['REFERRING PHYSICIAN'].isin(doctors))
-                ])
-                
-                new_referrals = len(working_data[
-                    (working_data['Month'] == newest_month) & 
-                    (working_data['REFERRING PHYSICIAN'].isin(doctors))
-                ])
-                
-                # Calculate the difference
-                difference = new_referrals - old_referrals
-                
-                # Display metric with delta
-                st.metric(
-                    f"Referrals ({newest_month})",
-                    new_referrals,
-                    delta=difference,
-                    delta_color="normal"
-                )
-        
-        # Calculate performance metrics for each category and month
-        performance_data = []
-        for category, doctors in categories.items():
-            for month in compare_months:
-                month_data = working_data[
-                    (working_data['Month'] == month) & 
-                    (working_data['REFERRING PHYSICIAN'].isin(doctors))
-                ]
-                
-                performance_data.append({
-                    'Category': category,
-                    'Month': month,
-                    'Total Procedures': len(month_data),
-                    'Unique Doctors Active': month_data['REFERRING PHYSICIAN'].nunique(),
-                    'Avg Procedures per Doctor': len(month_data) / len(doctors) if len(doctors) > 0 else 0,
-                    'Unique Insurances': month_data['Data Set'].nunique(),
-                })
-        
-        performance_df = pd.DataFrame(performance_data)
-        
-        # Create visualization for key metrics
-        st.subheader("Category Performance Comparison")
-        
-        # Total Procedures by Category
-        fig_procedures = pl.graph_objects.Figure()
-        for i, (category, doctors) in enumerate(categories.items()):
-            category_data = performance_df[performance_df['Category'] == category]
-            fig_procedures.add_trace(pl.graph_objects.Bar(
-                name=category,
-                x=category_data['Month'],
-                y=category_data['Total Procedures'],
-                text=category_data['Total Procedures'],
-                textposition='auto',
-                marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
-            ))
-        
-        fig_procedures.update_layout(
-            title="Total Procedures by Category",
-            barmode='group',
-            yaxis_title="Number of Procedures"
+        # Month selector
+        compare_months = st.multiselect(
+            "Select Two Months to Compare",
+            options=working_data['Month'].unique(),
+            default=working_data['Month'].unique()[-2:],  # Default to last two months
+            max_selections=2,
+            help="First month selected will be the base month for comparison"
         )
-        st.plotly_chart(fig_procedures, use_container_width=True)
         
-        # Average Procedures per Doctor
-        fig_avg = pl.graph_objects.Figure()
-        for i, (category, doctors) in enumerate(categories.items()):
-            category_data = performance_df[performance_df['Category'] == category]
-            fig_avg.add_trace(pl.graph_objects.Bar(
-                name=category,
-                x=category_data['Month'],
-                y=category_data['Avg Procedures per Doctor'],
-                text=category_data['Avg Procedures per Doctor'].round(1),
-                textposition='auto',
-                marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
-            ))
+        if len(compare_months) == 2:
+            older_month, newest_month = compare_months
+            
+            # Categorize doctors by representative
+            alex_docs = top_200_docs[
+                top_200_docs[responsible_column] == 'ALEX'
+            ]['Referring Physician'].tolist()
+            
+            luis_docs = top_200_docs[
+                top_200_docs[responsible_column] == 'LUIS'
+            ]['Referring Physician'].tolist()
+            
+            gerardo_docs = top_200_docs[
+                top_200_docs[responsible_column] == 'GERARDO'
+            ]['Referring Physician'].tolist()
+            
+            # Calculate metrics for each category
+            categories = {
+                'Alex': alex_docs,
+                'Luis': luis_docs,
+                'Gerardo': gerardo_docs
+            }
+            
+            # Display category sizes and total referrals
+            st.subheader("Number of Doctors Assigned to Each Representative")
+            col1, col2, col3 = st.columns(3)
+            cols = [col1, col2, col3]
+            for i, (category, doctors) in enumerate(categories.items()):
+                with cols[i]:
+                    st.metric(f"{category}", len(doctors))
+            
+            # Calculate and display total referrals per category
+            st.subheader("Total Referrals by Doctors Assigned")
+            col1, col2, col3 = st.columns(3)
+            cols = [col1, col2, col3]
+            
+            for i, (category, doctors) in enumerate(categories.items()):
+                with cols[i]:
+                    # Get referrals for both months
+                    old_referrals = len(working_data[
+                        (working_data['Month'] == older_month) & 
+                        (working_data['REFERRING PHYSICIAN'].isin(doctors))
+                    ])
+                    
+                    new_referrals = len(working_data[
+                        (working_data['Month'] == newest_month) & 
+                        (working_data['REFERRING PHYSICIAN'].isin(doctors))
+                    ])
+                    
+                    # Calculate the difference
+                    difference = new_referrals - old_referrals
+                    
+                    # Display metric with delta
+                    st.metric(
+                        f"Referrals ({newest_month})",
+                        new_referrals,
+                        delta=difference,
+                        delta_color="normal"
+                    )
+            
+            # Calculate performance metrics for each category and month
+            performance_data = []
+            for category, doctors in categories.items():
+                for month in compare_months:
+                    month_data = working_data[
+                        (working_data['Month'] == month) & 
+                        (working_data['REFERRING PHYSICIAN'].isin(doctors))
+                    ]
+                    
+                    performance_data.append({
+                        'Category': category,
+                        'Month': month,
+                        'Total Procedures': len(month_data),
+                        'Unique Doctors Active': month_data['REFERRING PHYSICIAN'].nunique(),
+                        'Avg Procedures per Doctor': len(month_data) / len(doctors) if len(doctors) > 0 else 0,
+                        'Unique Insurances': month_data['Data Set'].nunique(),
+                    })
+            
+            performance_df = pd.DataFrame(performance_data)
+            
+            # Create visualization for key metrics
+            st.subheader("Category Performance Comparison")
+            
+            # Total Procedures by Category
+            fig_procedures = pl.graph_objects.Figure()
+            for i, (category, doctors) in enumerate(categories.items()):
+                category_data = performance_df[performance_df['Category'] == category]
+                fig_procedures.add_trace(pl.graph_objects.Bar(
+                    name=category,
+                    x=category_data['Month'],
+                    y=category_data['Total Procedures'],
+                    text=category_data['Total Procedures'],
+                    textposition='auto',
+                    marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
+                ))
+            
+            fig_procedures.update_layout(
+                title="Total Procedures by Category",
+                barmode='group',
+                yaxis_title="Number of Procedures"
+            )
+            st.plotly_chart(fig_procedures, use_container_width=True)
+            
+            # Average Procedures per Doctor
+            fig_avg = pl.graph_objects.Figure()
+            for i, (category, doctors) in enumerate(categories.items()):
+                category_data = performance_df[performance_df['Category'] == category]
+                fig_avg.add_trace(pl.graph_objects.Bar(
+                    name=category,
+                    x=category_data['Month'],
+                    y=category_data['Avg Procedures per Doctor'],
+                    text=category_data['Avg Procedures per Doctor'].round(1),
+                    textposition='auto',
+                    marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
+                ))
+            
+            fig_avg.update_layout(
+                title="Average Procedures per Doctor",
+                barmode='group',
+                yaxis_title="Average Procedures"
+            )
+            st.plotly_chart(fig_avg, use_container_width=True)
+            
+            # Active Doctors
+            fig_active = pl.graph_objects.Figure()
+            for i, (category, doctors) in enumerate(categories.items()):
+                category_data = performance_df[performance_df['Category'] == category]
+                fig_active.add_trace(pl.graph_objects.Bar(
+                    name=category,
+                    x=category_data['Month'],
+                    y=category_data['Unique Doctors Active'],
+                    text=category_data['Unique Doctors Active'],
+                    textposition='auto',
+                    marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
+                ))
+            
+            fig_active.update_layout(
+                title="Active Doctors by Category",
+                barmode='group',
+                yaxis_title="Number of Active Doctors"
+            )
+            st.plotly_chart(fig_active, use_container_width=True)
+            
+            # Summary table
+            st.subheader("Detailed Performance Metrics")
+            summary_table = performance_df.pivot(
+                index='Category',
+                columns='Month',
+                values=['Total Procedures', 'Unique Doctors Active', 'Avg Procedures per Doctor']
+            ).round(2)
+            st.dataframe(summary_table)
         
-        fig_avg.update_layout(
-            title="Average Procedures per Doctor",
-            barmode='group',
-            yaxis_title="Average Procedures"
-        )
-        st.plotly_chart(fig_avg, use_container_width=True)
-        
-        # Active Doctors
-        fig_active = pl.graph_objects.Figure()
-        for i, (category, doctors) in enumerate(categories.items()):
-            category_data = performance_df[performance_df['Category'] == category]
-            fig_active.add_trace(pl.graph_objects.Bar(
-                name=category,
-                x=category_data['Month'],
-                y=category_data['Unique Doctors Active'],
-                text=category_data['Unique Doctors Active'],
-                textposition='auto',
-                marker_color=COLOR_SCHEME[i % len(COLOR_SCHEME)]
-            ))
-        
-        fig_active.update_layout(
-            title="Active Doctors by Category",
-            barmode='group',
-            yaxis_title="Number of Active Doctors"
-        )
-        st.plotly_chart(fig_active, use_container_width=True)
-        
-        # Summary table
-        st.subheader("Detailed Performance Metrics")
-        summary_table = performance_df.pivot(
-            index='Category',
-            columns='Month',
-            values=['Total Procedures', 'Unique Doctors Active', 'Avg Procedures per Doctor']
-        ).round(2)
-        st.dataframe(summary_table)
-    
+        else:
+            st.warning("Please select exactly two months for comparison")
     else:
-        st.warning("Please select exactly two months for comparison")
+        st.error("Top 200 Doctors data or responsible column information is not available.")
 
 # Add this function after imports
 def add_back_to_top():
