@@ -30,7 +30,7 @@ def calculate_percentage_change(old_value, new_value):
 def load_base_data():
     try:
         # Attempt to load the base data file
-        base_data = pd.read_excel("base_data (3).xlsx")
+        base_data = pd.read_excel("base_data.xlsx")
         
         # Verify the required columns exist
         required_columns = ['TRANSFORMED DATE', 'PROCEDURE', 'REFERRING PHYSICIAN', 'Data Set']
@@ -60,8 +60,25 @@ def load_base_data():
 @st.cache_data
 def load_top_200_docs():
     try:
-        # Attempt to load the Top 200 Doctors file
+        # Load the Top 200 Doctors file
         top_200 = pd.read_excel("Top_200_doctores.xlsx")
+        
+        # Check if the responsible column exists (try different possible names)
+        responsible_column = None
+        possible_names = ['RESPONSABLE', 'Responsable', 'RESPONSIBLE', 'Responsible']
+        
+        for name in possible_names:
+            if name in top_200.columns:
+                responsible_column = name
+                break
+        
+        if responsible_column is None:
+            st.error("Could not find the responsible person column in the Top 200 Doctors file.")
+            return None
+        
+        # Store the correct column name for later use
+        top_200['correct_responsible_column'] = responsible_column
+        
         return top_200
     except Exception as e:
         st.error(f"Error loading Top 200 Doctors file: {str(e)}")
@@ -747,15 +764,14 @@ with tab3:
         st.error("Please ensure the Top 200 Doctores.xlsx file is in the same directory as the app")
 
 with tab4:
-    st.subheader("Top 200 Doctors Category Analysis")
+    st.subheader("Top 200 Doctors Representative Analysis")
     
     # Add instructions
     st.info("""
-    📊 **Category Definitions:**
-    - **Luis Only**: Doctors exclusively assigned to Luis
-    - **Gerardo Only**: Doctors exclusively assigned to Gerardo
-    - **Shared**: Doctors assigned to both Luis and Gerardo
-    - **Unassigned**: Doctors not assigned to any representative
+    📊 **Representative Categories:**
+    - **Alex**: Doctors assigned to Alex
+    - **Luis**: Doctors assigned to Luis  
+    - **Gerardo**: Doctors assigned to Gerardo
     """)
     
     # Month selector
@@ -770,46 +786,41 @@ with tab4:
     if len(compare_months) == 2:
         older_month, newest_month = compare_months
         
-        # Categorize doctors
-        luis_only = top_200_docs[
-            (top_200_docs['Luis '].fillna('') == 'x') & 
-            (top_200_docs['Gerardo'].fillna('') != 'x')
+        # Get the correct column name
+        responsible_column = top_200_docs['correct_responsible_column'].iloc[0]
+        
+        # Categorize doctors by representative
+        alex_docs = top_200_docs[
+            top_200_docs[responsible_column] == 'ALEX'
         ]['Referring Physician'].tolist()
         
-        gerardo_only = top_200_docs[
-            (top_200_docs['Luis '].fillna('') != 'x') & 
-            (top_200_docs['Gerardo'].fillna('') == 'x')
+        luis_docs = top_200_docs[
+            top_200_docs[responsible_column] == 'LUIS'
         ]['Referring Physician'].tolist()
         
-        shared = top_200_docs[
-            (top_200_docs['Luis '].fillna('') == 'x') & 
-            (top_200_docs['Gerardo'].fillna('') == 'x')
-        ]['Referring Physician'].tolist()
-        
-        unassigned = top_200_docs[
-            (top_200_docs['Luis '].fillna('') != 'x') & 
-            (top_200_docs['Gerardo'].fillna('') != 'x')
+        gerardo_docs = top_200_docs[
+            top_200_docs[responsible_column] == 'GERARDO'
         ]['Referring Physician'].tolist()
         
         # Calculate metrics for each category
         categories = {
-            'Luis Only': luis_only,
-            'Gerardo Only': gerardo_only,
-            'Shared': shared,
-            'Unassigned': unassigned
+            'Alex': alex_docs,
+            'Luis': luis_docs,
+            'Gerardo': gerardo_docs
         }
         
         # Display category sizes and total referrals
-        st.subheader("Category Distribution")
-        col1, col2, col3, col4 = st.columns(4)
-        cols = [col1, col2, col3, col4]
+        st.subheader("Number of Doctors Assigned to Each Representative")
+        col1, col2, col3 = st.columns(3)
+        cols = [col1, col2, col3]
         for i, (category, doctors) in enumerate(categories.items()):
             with cols[i]:
                 st.metric(f"{category}", len(doctors))
         
         # Calculate and display total referrals per category
-        st.subheader("Total Referrals by Category")
-        col1, col2, col3, col4 = st.columns(4)
+        st.subheader("Total Referrals by Doctors Assigned")
+        col1, col2, col3 = st.columns(3)
+        cols = [col1, col2, col3]
         
         for i, (category, doctors) in enumerate(categories.items()):
             with cols[i]:
