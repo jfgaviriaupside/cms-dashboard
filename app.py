@@ -29,32 +29,59 @@ def calculate_percentage_change(old_value, new_value):
 @st.cache_data
 def load_base_data():
     try:
-        # Attempt to load the base data file
-        base_data = pd.read_excel("base_data.xlsx")
+        # Load only the doctor database
+        doctor_data = pd.read_excel("doctor_data.xlsx")
         
-        # Verify the required columns exist
-        required_columns = ['TRANSFORMED DATE', 'PROCEDURE', 'REFERRING PHYSICIAN', 'Data Set']
-        missing_columns = [col for col in required_columns if col not in base_data.columns]
+        # Verify required columns
+        required_columns = ['TRANSFORMED DATE', 'PROCEDURE', 'REFERRING PHYSICIAN']
+        missing_columns = [col for col in required_columns if col not in doctor_data.columns]
         
         if missing_columns:
-            st.error(f"Base data is missing required columns: {', '.join(missing_columns)}")
+            st.error(f"Doctor data missing required columns: {', '.join(missing_columns)}")
             return None
             
-        # Convert date column
-        try:
-            base_data['TRANSFORMED DATE'] = pd.to_datetime(base_data['TRANSFORMED DATE'])
-        except Exception as e:
-            st.error(f"Error converting dates in base data: {str(e)}")
-            return None
-            
-        st.success(f"Successfully loaded base data with {len(base_data)} records")
-        return base_data
+        # Before conversion, let's check the date range
+        st.write("Original date range:", 
+                doctor_data['TRANSFORMED DATE'].min(),
+                "to",
+                doctor_data['TRANSFORMED DATE'].max())
         
-    except FileNotFoundError:
-        st.error("Could not find base_data.xlsx in the current directory. Please ensure the file exists.")
+        # Convert dates with European format (day first)
+        try:
+            doctor_data['TRANSFORMED DATE'] = pd.to_datetime(
+                doctor_data['TRANSFORMED DATE'], 
+                dayfirst=True,
+                format='%d/%m/%Y'
+            )
+            
+            # After conversion, check the date range
+            st.write("Converted date range:", 
+                    doctor_data['TRANSFORMED DATE'].min(),
+                    "to",
+                    doctor_data['TRANSFORMED DATE'].max())
+            
+        except Exception as e:
+            st.error(f"Error converting dates: {str(e)}")
+            return None
+            
+        # Standardize procedures
+        doctor_data['PROCEDURE'] = doctor_data['PROCEDURE'].replace(PROCEDURE_MAPPING)
+        
+        st.success(f"""
+        Successfully loaded data:
+        - Total Records: {len(doctor_data):,}
+        - Date Range: {doctor_data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {doctor_data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}
+        - Unique Doctors: {doctor_data['REFERRING PHYSICIAN'].nunique():,}
+        - Unique Procedures: {doctor_data['PROCEDURE'].nunique():,}
+        """)
+        
+        return doctor_data
+        
+    except FileNotFoundError as e:
+        st.error(f"Could not find doctor_data.xlsx file: {str(e)}")
         return None
     except Exception as e:
-        st.error(f"Error loading base data: {str(e)}")
+        st.error(f"Error loading data: {str(e)}")
         return None
 
 @st.cache_data
