@@ -106,6 +106,10 @@ def load_top_200_docs():
         return None, None
 
 # Load base data
+if st.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.rerun()
+
 base_data = load_base_data()
 top_200_docs, responsible_column = load_top_200_docs()
 
