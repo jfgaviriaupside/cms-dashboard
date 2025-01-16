@@ -35,7 +35,7 @@ if st.button("🔄 Refresh Data", key="refresh_data_top"):
 def load_base_data():
     try:
         # Load only the doctor database
-        doctor_data = pd.read_excel("base_data.xlsx")
+        doctor_data = pd.read_excel("doctor_data.xlsx")
         
         # Convert dates with European format (day first)
         doctor_data['TRANSFORMED DATE'] = pd.to_datetime(
@@ -52,48 +52,6 @@ def load_base_data():
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         return None
-
-# Load data once at the start
-base_data = load_base_data()
-
-if base_data is not None:
-    # Pre-calculate working days data
-    working_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-    working_data = base_data[base_data['TRANSFORMED DATE'].dt.day_name().isin(working_days)].copy()
-    
-    # Create tabs but only process data when tab is selected
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "One Month Overview", 
-        "Two Month Comparison", 
-        "Top 200 Doctors Performance",
-        "Top 200 Doctors Category Analysis"
-    ])
-
-    # Process each tab only when selected
-    if tab1.selectbox("Select Month", working_data['Month'].unique(), key='tab1_month'):
-        # Tab 1 content here
-        pass
-        
-    if tab2.selectbox("Select First Month", working_data['Month'].unique(), key='tab2_month1'):
-        # Tab 2 content here
-        pass
-        
-    if tab3.selectbox("Select Doctor", top_200['Referring Physician'].unique(), key='tab3_doctor'):
-        # Tab 3 content here
-        pass
-        
-    if tab4.selectbox("Select Analysis Period", working_data['Month'].unique(), key='tab4_month'):
-        # Tab 4 content here
-        pass
-
-else:
-    st.error("""
-    No base data available. Please ensure:
-    1. The file 'doctor_data.xlsx' exists in the app directory
-    2. The file contains the required columns
-    3. The data is properly formatted
-    """)
-    st.stop()
 
 @st.cache_data
 def load_top_200_docs():
@@ -124,7 +82,47 @@ if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
     st.rerun()
 
+base_data = load_base_data()
 top_200_docs, responsible_column = load_top_200_docs()
+
+if base_data is not None:
+    # Pre-calculate working days data
+    working_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    working_data = base_data[base_data['TRANSFORMED DATE'].dt.day_name().isin(working_days)].copy()
+    
+    # Create tabs but only process data when selected
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "One Month Overview", 
+        "Two Month Comparison", 
+        "Top 200 Doctors Performance",
+        "Top 200 Doctors Category Analysis"
+    ])
+
+    # Process each tab only when selected
+    if tab1.selectbox("Select Month", working_data['Month'].unique(), key='tab1_month'):
+        # Tab 1 content here
+        pass
+        
+    if tab2.selectbox("Select First Month", working_data['Month'].unique(), key='tab2_month1'):
+        # Tab 2 content here
+        pass
+        
+    if tab3.selectbox("Select Doctor", top_200_docs['Referring Physician'].unique(), key='tab3_doctor'):
+        # Tab 3 content here
+        pass
+        
+    if tab4.selectbox("Select Analysis Period", working_data['Month'].unique(), key='tab4_month'):
+        # Tab 4 content here
+        pass
+
+else:
+    st.error("""
+    No base data available. Please ensure:
+    1. The file 'doctor_data.xlsx' exists in the app directory
+    2. The file contains the required columns
+    3. The data is properly formatted
+    """)
+    st.stop()
 
 # Function to validate new data
 def validate_data(new_data, base_data):
