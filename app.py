@@ -110,8 +110,8 @@ def load_top_200_docs():
         st.error(f"Error loading Top 200 Doctors file: {str(e)}")
         return None, None
 
-# If you have another refresh button elsewhere, give it a different key
-if st.button("🔄 Refresh Data", key="refresh_data_sidebar"):
+# Load base data
+if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
     st.rerun()
 
@@ -492,17 +492,65 @@ with tab2:
         st.plotly_chart(fig_doctors, use_container_width=True)
         
         # Calculate changes for all doctors
-        all_doctors_comparison = pd.DataFrame({
-            older_month: older_month_data.groupby('REFERRING PHYSICIAN').size(),
-            newest_month: newest_month_data.groupby('REFERRING PHYSICIAN').size()
-        }).fillna(0)
-        
-        # Calculate absolute change
-        all_doctors_comparison['Change'] = all_doctors_comparison[newest_month] - all_doctors_comparison[older_month]
+        if len(compare_months) == 2:
+            older_month, newest_month = compare_months
+            
+            try:
+                # Initialize empty lists for the data
+                doctors = []
+                old_counts = []
+                new_counts = []
+                
+                # Get all unique doctors
+                all_doctors = set(working_data['REFERRING PHYSICIAN'].unique())
+                
+                # Calculate counts for each doctor in both months
+                for doctor in all_doctors:
+                    doctors.append(doctor)
+                    
+                    # Count for older month
+                    old_count = len(working_data[
+                        (working_data['Month'] == older_month) & 
+                        (working_data['REFERRING PHYSICIAN'] == doctor)
+                    ])
+                    old_counts.append(old_count)
+                    
+                    # Count for newer month
+                    new_count = len(working_data[
+                        (working_data['Month'] == newest_month) & 
+                        (working_data['REFERRING PHYSICIAN'] == doctor)
+                    ])
+                    new_counts.append(new_count)
+                
+                # Create DataFrame with the collected data
+                all_doctors_comparison = pd.DataFrame({
+                    'Doctor': doctors,
+                    f'{older_month}_Count': old_counts,
+                    f'{newest_month}_Count': new_counts
+                })
+                
+                # Calculate difference
+                all_doctors_comparison['Difference'] = (
+                    all_doctors_comparison[f'{newest_month}_Count'] - 
+                    all_doctors_comparison[f'{older_month}_Count']
+                )
+                
+                # Sort by newest month count
+                all_doctors_comparison = all_doctors_comparison.sort_values(
+                    f'{newest_month}_Count',
+                    ascending=False
+                ).reset_index(drop=True)
+                
+            except Exception as e:
+                st.error(f"Error creating comparison: {str(e)}")
+                st.write("Debug info:")
+                st.write(f"Number of doctors: {len(all_doctors)}")
+                st.write(f"Data types:", all_doctors_comparison.dtypes)
+                st.stop()
         
         # Get top 10 gainers and losers
-        gainers = all_doctors_comparison.nlargest(10, 'Change')
-        losers = all_doctors_comparison.nsmallest(10, 'Change')
+        gainers = all_doctors_comparison.nlargest(10, 'Difference')
+        losers = all_doctors_comparison.nsmallest(10, 'Difference')
         
         # Display gainers and losers
         col1, col2 = st.columns(2)
@@ -512,8 +560,8 @@ with tab2:
             fig_gainers = pl.graph_objects.Figure(data=[
                 pl.graph_objects.Bar(
                     x=gainers.index,
-                    y=gainers['Change'],
-                    text=gainers['Change'].round(0).astype(int),
+                    y=gainers['Difference'],
+                    text=gainers['Difference'].round(0).astype(int),
                     textposition='auto',
                     marker_color=COLOR_SCHEME[0]
                 )
@@ -530,8 +578,8 @@ with tab2:
             fig_losers = pl.graph_objects.Figure(data=[
                 pl.graph_objects.Bar(
                     x=losers.index,
-                    y=losers['Change'],
-                    text=losers['Change'].round(0).astype(int),
+                    y=losers['Difference'],
+                    text=losers['Difference'].round(0).astype(int),
                     textposition='auto',
                     marker_color=COLOR_SCHEME[1]
                 )
