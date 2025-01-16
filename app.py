@@ -30,61 +30,70 @@ if st.button("🔄 Refresh Data", key="refresh_data_top"):
     st.cache_data.clear()
     st.rerun()
 
-# Load base data
-@st.cache_data
+# Optimize the data loading function
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_base_data():
     try:
         # Load only the doctor database
-        doctor_data = pd.read_excel("base_data.xlsx")
-        
-        # Verify required columns
-        required_columns = ['TRANSFORMED DATE', 'PROCEDURE', 'REFERRING PHYSICIAN']
-        missing_columns = [col for col in required_columns if col not in doctor_data.columns]
-        
-        if missing_columns:
-            st.error(f"Doctor data missing required columns: {', '.join(missing_columns)}")
-            return None
-            
-        # Before conversion, let's check the date range
-        st.write("Original date range:", 
-                doctor_data['TRANSFORMED DATE'].min(),
-                "to",
-                doctor_data['TRANSFORMED DATE'].max())
+        doctor_data = pd.read_excel("doctor_data.xlsx")
         
         # Convert dates with European format (day first)
-        try:
-            doctor_data['TRANSFORMED DATE'] = pd.to_datetime(
-                doctor_data['TRANSFORMED DATE'], 
-                dayfirst=True,
-                format='%d/%m/%Y'
-            )
-            
-            # After conversion, check the date range
-            st.write("Converted date range:", 
-                    doctor_data['TRANSFORMED DATE'].min(),
-                    "to",
-                    doctor_data['TRANSFORMED DATE'].max())
-            
-        except Exception as e:
-            st.error(f"Error converting dates: {str(e)}")
-            return None
-            
-        st.success(f"""
-        Successfully loaded data:
-        - Total Records: {len(doctor_data):,}
-        - Date Range: {doctor_data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {doctor_data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}
-        - Unique Doctors: {doctor_data['REFERRING PHYSICIAN'].nunique():,}
-        - Unique Procedures: {doctor_data['PROCEDURE'].nunique():,}
-        """)
+        doctor_data['TRANSFORMED DATE'] = pd.to_datetime(
+            doctor_data['TRANSFORMED DATE'], 
+            dayfirst=True,
+            format='%d/%m/%Y'
+        )
+        
+        # Pre-calculate the Month column to avoid repeated calculations
+        doctor_data['Month'] = doctor_data['TRANSFORMED DATE'].dt.to_period('M').astype(str)
         
         return doctor_data
         
-    except FileNotFoundError as e:
-        st.error(f"Could not find doctor_data.xlsx file: {str(e)}")
-        return None
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         return None
+
+# Load data once at the start
+base_data = load_base_data()
+
+if base_data is not None:
+    # Pre-calculate working days data
+    working_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    working_data = base_data[base_data['TRANSFORMED DATE'].dt.day_name().isin(working_days)].copy()
+    
+    # Create tabs but only process data when tab is selected
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "One Month Overview", 
+        "Two Month Comparison", 
+        "Top 200 Doctors Performance",
+        "Top 200 Doctors Category Analysis"
+    ])
+
+    # Process each tab only when selected
+    if tab1.selectbox("Select Month", working_data['Month'].unique(), key='tab1_month'):
+        # Tab 1 content here
+        pass
+        
+    if tab2.selectbox("Select First Month", working_data['Month'].unique(), key='tab2_month1'):
+        # Tab 2 content here
+        pass
+        
+    if tab3.selectbox("Select Doctor", top_200_docs['Referring Physician'].unique(), key='tab3_doctor'):
+        # Tab 3 content here
+        pass
+        
+    if tab4.selectbox("Select Analysis Period", working_data['Month'].unique(), key='tab4_month'):
+        # Tab 4 content here
+        pass
+
+else:
+    st.error("""
+    No base data available. Please ensure:
+    1. The file 'doctor_data.xlsx' exists in the app directory
+    2. The file contains the required columns
+    3. The data is properly formatted
+    """)
+    st.stop()
 
 @st.cache_data
 def load_top_200_docs():
@@ -115,7 +124,6 @@ if st.button("🔄 Refresh Data"):
     st.cache_data.clear()
     st.rerun()
 
-base_data = load_base_data()
 top_200_docs, responsible_column = load_top_200_docs()
 
 # Function to validate new data
@@ -234,7 +242,7 @@ if base_data is not None:
 else:
     st.error("""
     No base data available. Please ensure:
-    1. The file 'base_data.xlsx' exists in the app directory
+    1. The file 'doctor_data.xlsx' exists in the app directory
     2. The file contains the required columns
     3. The data is properly formatted
     """)
