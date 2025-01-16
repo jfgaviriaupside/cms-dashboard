@@ -10,7 +10,7 @@ st.set_page_config(page_title="CMS Performance Dashboard", layout="wide")
 st.title("CMS Performance Dashboard")
 
 # Define consistent color scheme
-COLOR_SCHEME = px.colors.qualitative.Set3  # or any other color scheme you prefer
+COLOR_SCHEME = px.colors.qualitative.Set3  # or any other color scheme you prefe
 
 # Add timestamp
 mexico_tz = pytz.timezone('America/Mexico_City')
