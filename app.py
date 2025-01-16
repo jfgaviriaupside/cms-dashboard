@@ -875,7 +875,7 @@ with tab4:
             
             # Calculate performance metrics for each category and month
             performance_data = []
-            for category, doctors in categories.items()):
+            for category, doctors in categories.items():
                 for month in compare_months:
                     month_data = working_data[
                         (working_data['Month'] == month) & 
