@@ -10,20 +10,12 @@ st.set_page_config(page_title="CMS Performance Dashboard", layout="wide")
 st.title("CMS Performance Dashboard")
 
 # Define consistent color scheme
-COLOR_SCHEME = px.colors.qualitative.Set3  # or any other color scheme you prefe
+COLOR_SCHEME = px.colors.qualitative.Set3  # or any other color scheme you prefer
 
 # Add timestamp
 mexico_tz = pytz.timezone('America/Mexico_City')
 current_time = datetime.now(mexico_tz)
 st.caption(f"Last Updated: {current_time.strftime('%Y-%m-%d %I:%M %p %Z')}")
-
-# Add this after the validate_data function and before loading the base data
-
-def calculate_percentage_change(old_value, new_value):
-    """Calculate the percentage change between two values."""
-    if old_value == 0:
-        return None
-    return ((new_value - old_value) / old_value) * 100
 
 # First refresh button (at the top)
 if st.button("🔄 Refresh Data", key="refresh_data_top"):
@@ -78,14 +70,10 @@ def load_top_200_docs():
         return None, None
 
 # Load base data
-if st.button("🔄 Refresh Data"):
-    st.cache_data.clear()
-    st.rerun()
-
 base_data = load_base_data()
 top_200_docs, responsible_column = load_top_200_docs()
 
-if base_data is not None:
+if base_data is not None and top_200_docs is not None:
     # Pre-calculate working days data
     working_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
     working_data = base_data[base_data['TRANSFORMED DATE'].dt.day_name().isin(working_days)].copy()
@@ -98,29 +86,53 @@ if base_data is not None:
         "Top 200 Doctors Category Analysis"
     ])
 
-    # Process each tab only when selected
-    if tab1.selectbox("Select Month", working_data['Month'].unique(), key='tab1_month'):
+    with tab1:
+        selected_month = st.selectbox(
+            "Select Month", 
+            working_data['Month'].unique(), 
+            key='tab1_month'
+        )
         # Tab 1 content here
-        pass
         
-    if tab2.selectbox("Select First Month", working_data['Month'].unique(), key='tab2_month1'):
+    with tab2:
+        selected_months = st.multiselect(
+            "Select Two Months to Compare",
+            options=working_data['Month'].unique(),
+            default=working_data['Month'].unique()[-2:],
+            max_selections=2,
+            key='tab2_months'
+        )
         # Tab 2 content here
-        pass
         
-    if tab3.selectbox("Select Doctor", top_200_docs['Referring Physician'].unique(), key='tab3_doctor'):
-        # Tab 3 content here
-        pass
-        
-    if tab4.selectbox("Select Analysis Period", working_data['Month'].unique(), key='tab4_month'):
-        # Tab 4 content here
-        pass
+    with tab3:
+        if top_200_docs is not None and responsible_column is not None:
+            selected_doctor = st.selectbox(
+                "Select Doctor",
+                options=top_200_docs['Referring Physician'].unique(),
+                key='tab3_doctor'
+            )
+            # Tab 3 content here
+        else:
+            st.error("Top 200 Doctors data not available")
+            
+    with tab4:
+        if top_200_docs is not None and responsible_column is not None:
+            analysis_period = st.selectbox(
+                "Select Analysis Period",
+                options=working_data['Month'].unique(),
+                key='tab4_month'
+            )
+            # Tab 4 content here
+        else:
+            st.error("Top 200 Doctors data not available")
 
 else:
     st.error("""
-    No base data available. Please ensure:
+    No data available. Please ensure:
     1. The file 'doctor_data.xlsx' exists in the app directory
-    2. The file contains the required columns
-    3. The data is properly formatted
+    2. The file 'Top_200_doctores.xlsx' exists in the app directory
+    3. The files contain the required columns
+    4. The data is properly formatted
     """)
     st.stop()
 
