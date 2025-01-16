@@ -17,30 +17,66 @@ mexico_tz = pytz.timezone('America/Mexico_City')
 current_time = datetime.now(mexico_tz)
 st.caption(f"Last Updated: {current_time.strftime('%Y-%m-%d %I:%M %p %Z')}")
 
-# First refresh button (at the top)
-if st.button("🔄 Refresh Data"):
-    st.cache_data.clear()
-    st.rerun()
+# Add this after the validate_data function and before loading the base data
 
-# Optimize the data loading function
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+def calculate_percentage_change(old_value, new_value):
+    """Calculate the percentage change between two values."""
+    if old_value == 0:
+        return None
+    return ((new_value - old_value) / old_value) * 100
+
+# Load base data
+@st.cache_data
 def load_base_data():
     try:
         # Load only the doctor database
         doctor_data = pd.read_excel("base_data.xlsx")
         
-        # Convert dates with European format (day first)
-        doctor_data['TRANSFORMED DATE'] = pd.to_datetime(
-            doctor_data['TRANSFORMED DATE'], 
-            dayfirst=True,
-            format='%d/%m/%Y'
-        )
+        # Verify required columns
+        required_columns = ['TRANSFORMED DATE', 'PROCEDURE', 'REFERRING PHYSICIAN']
+        missing_columns = [col for col in required_columns if col not in doctor_data.columns]
         
-        # Pre-calculate the Month column to avoid repeated calculations
-        doctor_data['Month'] = doctor_data['TRANSFORMED DATE'].dt.to_period('M').astype(str)
+        if missing_columns:
+            st.error(f"Doctor data missing required columns: {', '.join(missing_columns)}")
+            return None
+            
+        # Before conversion, let's check the date range
+        st.write("Original date range:", 
+                doctor_data['TRANSFORMED DATE'].min(),
+                "to",
+                doctor_data['TRANSFORMED DATE'].max())
+        
+        # Convert dates with European format (day first)
+        try:
+            doctor_data['TRANSFORMED DATE'] = pd.to_datetime(
+                doctor_data['TRANSFORMED DATE'], 
+                dayfirst=True,
+                format='%d/%m/%Y'
+            )
+            
+            # After conversion, check the date range
+            st.write("Converted date range:", 
+                    doctor_data['TRANSFORMED DATE'].min(),
+                    "to",
+                    doctor_data['TRANSFORMED DATE'].max())
+            
+        except Exception as e:
+            st.error(f"Error converting dates: {str(e)}")
+            return None
+            
+        st.success(f"""
+        Successfully loaded data:
+        - Total Records: {len(doctor_data):,}
+        - Date Range: {doctor_data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {doctor_data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}
+        - Unique Doctors: {doctor_data['REFERRING PHYSICIAN'].nunique():,}
+        - Unique Procedures: {doctor_data['PROCEDURE'].nunique():,}
+        """)
         
         return doctor_data
         
+    except FileNotFoundError as e:
+        st.error(f"Could not find doctor_data.xlsx file: {str(e)}")
+        return None
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         return None
@@ -72,45 +108,6 @@ def load_top_200_docs():
 # Load base data
 base_data = load_base_data()
 top_200_docs, responsible_column = load_top_200_docs()
-
-if base_data is not None:
-    # Pre-calculate working days data
-    working_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-    working_data = base_data[base_data['TRANSFORMED DATE'].dt.day_name().isin(working_days)].copy()
-    
-    # Create tabs but only process data when selected
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "One Month Overview", 
-        "Two Month Comparison", 
-        "Top 200 Doctors Performance",
-        "Top 200 Doctors Category Analysis"
-    ])
-
-    # Process each tab only when selected
-    if tab1.selectbox("Select Month", working_data['Month'].unique(), key='tab1_month'):
-        # Tab 1 content here
-        pass
-        
-    if tab2.selectbox("Select First Month", working_data['Month'].unique(), key='tab2_month1'):
-        # Tab 2 content here
-        pass
-        
-    if tab3.selectbox("Select Doctor", top_200_docs['Referring Physician'].unique(), key='tab3_doctor'):
-        # Tab 3 content here
-        pass
-        
-    if tab4.selectbox("Select Analysis Period", working_data['Month'].unique(), key='tab4_month'):
-        # Tab 4 content here
-        pass
-
-else:
-    st.error("""
-    No base data available. Please ensure:
-    1. The file 'doctor_data.xlsx' exists in the app directory
-    2. The file contains the required columns
-    3. The data is properly formatted
-    """)
-    st.stop()
 
 # Function to validate new data
 def validate_data(new_data, base_data):
@@ -228,7 +225,7 @@ if base_data is not None:
 else:
     st.error("""
     No base data available. Please ensure:
-    1. The file 'doctor_data.xlsx' exists in the app directory
+    1. The file 'base_data.xlsx' exists in the app directory
     2. The file contains the required columns
     3. The data is properly formatted
     """)
@@ -486,65 +483,17 @@ with tab2:
         st.plotly_chart(fig_doctors, use_container_width=True)
         
         # Calculate changes for all doctors
-        if len(compare_months) == 2:
-            older_month, newest_month = compare_months
-            
-            try:
-                # Initialize empty lists for the data
-                doctors = []
-                old_counts = []
-                new_counts = []
-                
-                # Get all unique doctors
-                all_doctors = set(working_data['REFERRING PHYSICIAN'].unique())
-                
-                # Calculate counts for each doctor in both months
-                for doctor in all_doctors:
-                    doctors.append(doctor)
-                    
-                    # Count for older month
-                    old_count = len(working_data[
-                        (working_data['Month'] == older_month) & 
-                        (working_data['REFERRING PHYSICIAN'] == doctor)
-                    ])
-                    old_counts.append(old_count)
-                    
-                    # Count for newer month
-                    new_count = len(working_data[
-                        (working_data['Month'] == newest_month) & 
-                        (working_data['REFERRING PHYSICIAN'] == doctor)
-                    ])
-                    new_counts.append(new_count)
-                
-                # Create DataFrame with the collected data
-                all_doctors_comparison = pd.DataFrame({
-                    'Doctor': doctors,
-                    f'{older_month}_Count': old_counts,
-                    f'{newest_month}_Count': new_counts
-                })
-                
-                # Calculate difference
-                all_doctors_comparison['Difference'] = (
-                    all_doctors_comparison[f'{newest_month}_Count'] - 
-                    all_doctors_comparison[f'{older_month}_Count']
-                )
-                
-                # Sort by newest month count
-                all_doctors_comparison = all_doctors_comparison.sort_values(
-                    f'{newest_month}_Count',
-                    ascending=False
-                ).reset_index(drop=True)
-                
-            except Exception as e:
-                st.error(f"Error creating comparison: {str(e)}")
-                st.write("Debug info:")
-                st.write(f"Number of doctors: {len(all_doctors)}")
-                st.write(f"Data types:", all_doctors_comparison.dtypes)
-                st.stop()
+        all_doctors_comparison = pd.DataFrame({
+            older_month: older_month_data.groupby('REFERRING PHYSICIAN').size(),
+            newest_month: newest_month_data.groupby('REFERRING PHYSICIAN').size()
+        }).fillna(0)
+        
+        # Calculate absolute change
+        all_doctors_comparison['Change'] = all_doctors_comparison[newest_month] - all_doctors_comparison[older_month]
         
         # Get top 10 gainers and losers
-        gainers = all_doctors_comparison.nlargest(10, 'Difference')
-        losers = all_doctors_comparison.nsmallest(10, 'Difference')
+        gainers = all_doctors_comparison.nlargest(10, 'Change')
+        losers = all_doctors_comparison.nsmallest(10, 'Change')
         
         # Display gainers and losers
         col1, col2 = st.columns(2)
@@ -554,8 +503,8 @@ with tab2:
             fig_gainers = pl.graph_objects.Figure(data=[
                 pl.graph_objects.Bar(
                     x=gainers.index,
-                    y=gainers['Difference'],
-                    text=gainers['Difference'].round(0).astype(int),
+                    y=gainers['Change'],
+                    text=gainers['Change'].round(0).astype(int),
                     textposition='auto',
                     marker_color=COLOR_SCHEME[0]
                 )
@@ -572,8 +521,8 @@ with tab2:
             fig_losers = pl.graph_objects.Figure(data=[
                 pl.graph_objects.Bar(
                     x=losers.index,
-                    y=losers['Difference'],
-                    text=losers['Difference'].round(0).astype(int),
+                    y=losers['Change'],
+                    text=losers['Change'].round(0).astype(int),
                     textposition='auto',
                     marker_color=COLOR_SCHEME[1]
                 )
@@ -1063,4 +1012,3 @@ def add_back_to_top():
 
 # Add this at the end of your main code
 add_back_to_top()
-
