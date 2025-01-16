@@ -149,64 +149,8 @@ if base_data is not None:
     - Unique Doctors: {base_data['REFERRING PHYSICIAN'].nunique():,}
     """)
     
-    # Upload new data
-    st.subheader("Upload New Data")
-    uploaded_file = st.file_uploader(
-        "Upload additional data file (Excel or CSV)", 
-        type=["xlsx", "csv"],
-        help="File must have the same column structure as the base data"
-    )
-
-    if uploaded_file:
-        with st.spinner('Processing uploaded data...'):
-            # Load new data
-            try:
-                if uploaded_file.name.endswith(".xlsx"):
-                    new_data = pd.read_excel(uploaded_file)
-                else:
-                    new_data = pd.read_csv(uploaded_file)
-                
-                st.info(f"Attempting to process {len(new_data):,} new records...")
-                
-                # Validate new data
-                if validate_data(new_data, base_data):
-                    # Combine data
-                    data = pd.concat([base_data, new_data], ignore_index=True)
-                    
-                    # Remove duplicates if any
-                    initial_len = len(data)
-                    data = data.drop_duplicates()
-                    duplicates_removed = initial_len - len(data)
-                    
-                    # Sort by date
-                    data = data.sort_values('TRANSFORMED DATE')
-                    
-                    st.success(f"""
-                    Successfully processed new data:
-                    - Records added: {len(new_data):,}
-                    - Duplicates removed: {duplicates_removed:,}
-                    - Total records now: {len(data):,}
-                    """)
-                    
-                    # Display summary of new data
-                    st.write("Summary of new data:")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("New Records", f"{len(new_data):,}")
-                    with col2:
-                        st.metric("Date Range", f"{new_data['TRANSFORMED DATE'].min().strftime('%Y-%m-%d')} to {new_data['TRANSFORMED DATE'].max().strftime('%Y-%m-%d')}")
-                    with col3:
-                        st.metric("Unique Doctors", f"{new_data['REFERRING PHYSICIAN'].nunique():,}")
-                else:
-                    st.error("Please fix the data format issues before proceeding")
-                    st.stop()
-                    
-            except Exception as e:
-                st.error(f"Error processing uploaded file: {str(e)}")
-                st.stop()
-    else:
-        # If no new data uploaded, use base data
-        data = base_data.copy()
+    # Use base data directly without file upload option
+    data = base_data.copy()
 
     # Continue with data preprocessing
     data['Month'] = data['TRANSFORMED DATE'].dt.to_period('M').astype(str)
