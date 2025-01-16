@@ -78,7 +78,7 @@ if base_data is not None:
         # Tab 2 content here
         pass
         
-    if tab3.selectbox("Select Doctor", top_200_docs['Referring Physician'].unique(), key='tab3_doctor'):
+    if tab3.selectbox("Select Doctor", top_200['Referring Physician'].unique(), key='tab3_doctor'):
         # Tab 3 content here
         pass
         
