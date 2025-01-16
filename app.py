@@ -25,6 +25,11 @@ def calculate_percentage_change(old_value, new_value):
         return None
     return ((new_value - old_value) / old_value) * 100
 
+# Add this before loading the base data
+if st.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.rerun()
+
 # Load base data
 @st.cache_data
 def load_base_data():
