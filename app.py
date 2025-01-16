@@ -25,8 +25,8 @@ def calculate_percentage_change(old_value, new_value):
         return None
     return ((new_value - old_value) / old_value) * 100
 
-# Add this before loading the base data
-if st.button("🔄 Refresh Data"):
+# First refresh button (at the top)
+if st.button("🔄 Refresh Data", key="refresh_data_top"):
     st.cache_data.clear()
     st.rerun()
 
@@ -110,8 +110,8 @@ def load_top_200_docs():
         st.error(f"Error loading Top 200 Doctors file: {str(e)}")
         return None, None
 
-# Load base data
-if st.button("🔄 Refresh Data"):
+# If you have another refresh button elsewhere, give it a different key
+if st.button("🔄 Refresh Data", key="refresh_data_sidebar"):
     st.cache_data.clear()
     st.rerun()
 
