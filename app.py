@@ -483,14 +483,15 @@ with tab2:
         st.plotly_chart(fig_doctors, use_container_width=True)
         
         # Calculate changes for all doctors
-        all_doctors_comparison = pd.DataFrame({
-            older_month: older_month_data.groupby('REFERRING PHYSICIAN').size(),
-            newest_month: newest_month_data.groupby('REFERRING PHYSICIAN').size()
-        }).fillna(0)
-        
+        all_doctors = set(older_month_data['REFERRING PHYSICIAN'].unique()) | set(newest_month_data['REFERRING PHYSICIAN'].unique())
+        all_doctors_comparison = pd.DataFrame(index=list(all_doctors))
+        all_doctors_comparison[older_month] = older_month_data.groupby('REFERRING PHYSICIAN').size()
+        all_doctors_comparison[newest_month] = newest_month_data.groupby('REFERRING PHYSICIAN').size()
+        all_doctors_comparison = all_doctors_comparison.fillna(0)
+
         # Calculate absolute change
         all_doctors_comparison['Change'] = all_doctors_comparison[newest_month] - all_doctors_comparison[older_month]
-        
+
         # Get top 10 gainers and losers
         gainers = all_doctors_comparison.nlargest(10, 'Change')
         losers = all_doctors_comparison.nsmallest(10, 'Change')
@@ -874,7 +875,7 @@ with tab4:
             
             # Calculate performance metrics for each category and month
             performance_data = []
-            for category, doctors in categories.items():
+            for category, doctors in categories.items()):
                 for month in compare_months:
                     month_data = working_data[
                         (working_data['Month'] == month) & 
