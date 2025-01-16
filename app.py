@@ -35,7 +35,7 @@ if st.button("🔄 Refresh Data", key="refresh_data_top"):
 def load_base_data():
     try:
         # Load only the doctor database
-        doctor_data = pd.read_excel("doctor_data.xlsx")
+        doctor_data = pd.read_excel("base_data.xlsx")
         
         # Convert dates with European format (day first)
         doctor_data['TRANSFORMED DATE'] = pd.to_datetime(
